@@ -22,12 +22,12 @@ import { Id } from "./_generated/dataModel";
 
 /* 
   Create a new betting session.
-  A session is open for 10 seconds (the betting period), after which it is processed.
+  A session is open for 5 seconds (the betting period), after which it is processed.
 */
 export const createSession = mutation({
   handler: async (ctx) => {
     const startTime = Date.now();
-    const endTime = startTime + 10000; // 10-second betting period
+    const endTime = startTime + 5000; // 5-second betting period
     const neutralAxis = Math.random() * 100; // simulate price index neutral axis
 
     return await ctx.db.insert("sessions", {
@@ -60,7 +60,7 @@ export const joinActiveSession = mutation({
     const now = Date.now();
     if (currentSession && now > currentSession.endTime) {
       // The current session is expired—process its results.
-      await (ctx as any).runAction(api.aurum.processSessionResults, {
+      await ctx.scheduler.runAfter(0, api.aurum.processSessionResults, {
         sessionId: currentSession._id,
         finalPrice: Math.random() * 100,
       });
@@ -70,7 +70,9 @@ export const joinActiveSession = mutation({
     // If no active session exists, create a new one.
     if (!currentSession) {
       const sessionId = await ctx.runMutation(api.aurum.createSession);
-      currentSession = await ctx.db.get(sessionId);
+      currentSession = await ctx.runQuery(api.aurum.getSessionById, {
+        sessionId,
+      });
     }
 
     return currentSession;
@@ -89,15 +91,18 @@ export const placeBet = mutation({
     direction: v.union(v.literal("up"), v.literal("down")),
   },
   handler: async (ctx, args) => {
-    const userId = await ctx.auth.getUserIdentity();
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
-    // Ensure session exists and is open.
+    // Already fixed - extracting user ID
+    const userId = identity.subject.split("|")[1] as Id<"users">;
+
+    // Ensure session exists and is open
     const session = await ctx.db.get(args.sessionId);
     if (!session) throw new Error("Session not found");
     if (session.status !== "open") throw new Error("Session is closed");
 
-    // Update session volumes based on bet direction.
+    // Update session volumes based on bet direction
     if (args.direction === "up") {
       await ctx.db.patch(args.sessionId, {
         totalBuyVolume: session.totalBuyVolume + args.amount,
@@ -108,9 +113,9 @@ export const placeBet = mutation({
       });
     }
 
-    // Register the bet with initial "pending" status.
+    // Register the bet with initial "pending" status
     return await ctx.db.insert("bets", {
-      userId: userId.subject as Id<"users">,
+      userId,
       sessionId: args.sessionId,
       amount: args.amount,
       direction: args.direction,
@@ -163,7 +168,7 @@ export const getBetsForSession = query({
   - Otherwise, calculates winnings (after deducting an 8% broker fee) and distributes payouts:
     • 35% of the net pool goes to winning $1 bets,
     • 65% to winning $2 bets.
-  - Updates bet statuses and user balances accordingly.
+  - Updates bet statuses and user balances  accordingly.
   This follows the core logic outlined in your document.
 */
 export const processSessionResults = action({
@@ -315,18 +320,23 @@ export const depositFunds = mutation({
     paymentMethod: v.union(v.literal("eco-usd"), v.literal("cash")),
   },
   handler: async (ctx, args) => {
-    const userId = await ctx.auth.getUserIdentity();
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
-    const user = await ctx.db.get(userId.subject as Id<"users">);
+    // Extract just the user ID part after the pipe character
+    const userId = identity.subject.split("|")[1] as Id<"users">;
+
+    // Get the user document from the users table
+    const user = await ctx.db.get(userId);
     if (!user) throw new Error("User not found");
 
-    await ctx.db.patch(userId.subject as Id<"users">, {
+    // Update the user's balance in the users table
+    await ctx.db.patch(user._id, {
       balance: (user.balance || 0) + args.amount,
     });
 
     return await ctx.db.insert("transactions", {
-      userId: userId.subject as Id<"users">,
+      userId,
       amount: args.amount,
       type: "deposit",
       status: "completed",
@@ -347,20 +357,23 @@ export const withdrawFunds = mutation({
     paymentMethod: v.union(v.literal("eco-usd"), v.literal("cash")),
   },
   handler: async (ctx, args) => {
-    const userId = await ctx.auth.getUserIdentity();
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
-    const user = await ctx.db.get(userId.subject as Id<"users">);
+    // Fix: Extract user ID
+    const userId = identity.subject.split("|")[1] as Id<"users">;
+
+    const user = await ctx.db.get(userId);
     if (!user) throw new Error("User not found");
     if ((user.balance || 0) < args.amount)
       throw new Error("Insufficient funds");
 
-    await ctx.db.patch(userId.subject as Id<"users">, {
+    await ctx.db.patch(userId, {
       balance: (user.balance || 0) - args.amount,
     });
 
     return await ctx.db.insert("transactions", {
-      userId: userId.subject as Id<"users">,
+      userId,
       amount: -args.amount,
       type: "withdrawal",
       status: "completed",
@@ -381,18 +394,114 @@ export const recordAdminAction = mutation({
     details: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await ctx.auth.getUserIdentity();
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
-    const user = await ctx.db.get(userId.subject as Id<"users">);
+    // Fix: Extract user ID
+    const userId = identity.subject.split("|")[1] as Id<"users">;
+
+    const user = await ctx.db.get(userId);
     if (!user || user.role !== "admin")
       throw new Error("Unauthorized: Admin access required");
 
     return await ctx.db.insert("adminActions", {
-      adminId: userId.subject as Id<"users">,
+      adminId: userId,
       actionType: args.actionType,
       details: args.details,
       timestamp: Date.now(),
     });
+  },
+});
+
+/*
+  Start the session manager that will automatically handle session timing.
+  This should be called once when the app starts.
+*/
+export const startSessionManager = mutation({
+  handler: async (ctx) => {
+    // Check if manager is already running
+    const existing = await ctx.db
+      .query("system")
+      .withIndex("by_name", (q) => q.eq("name", "session_manager"))
+      .first();
+
+    if (!existing) {
+      // Create manager entry
+      await ctx.db.insert("system", {
+        name: "session_manager",
+        status: "running",
+        lastRun: Date.now(),
+      });
+
+      // Start the first iteration
+      await ctx.scheduler.runAfter(0, api.aurum.sessionManagerLoop);
+    }
+  },
+});
+
+/*
+  The session manager loop that runs continuously to manage sessions.
+*/
+export const sessionManagerLoop = action({
+  handler: async (ctx) => {
+    // Get current session
+    let currentSession = await ctx.runQuery(api.aurum.getCurrentSession);
+    const now = Date.now();
+
+    if (currentSession) {
+      if (currentSession.status === "open" && now > currentSession.endTime) {
+        // Close session and start processing
+        await ctx.runMutation(api.aurum.closeSession, {
+          sessionId: currentSession._id,
+        });
+
+        // Schedule results processing after 10 seconds
+        await ctx.scheduler.runAfter(10000, api.aurum.processSessionResults, {
+          sessionId: currentSession._id,
+          finalPrice: Math.random() * 100,
+        });
+      } else if (
+        currentSession.status === "closed" &&
+        now > currentSession.endTime + 10000
+      ) {
+        // After processing period, create new session
+        const sessionId = await ctx.runMutation(api.aurum.createSession);
+        currentSession = await ctx.runQuery(api.aurum.getSessionById, {
+          sessionId,
+        });
+      }
+    } else {
+      // If no session exists, create one
+      const sessionId = await ctx.runMutation(api.aurum.createSession);
+      currentSession = await ctx.runQuery(api.aurum.getSessionById, {
+        sessionId,
+      });
+    }
+
+    // Schedule next iteration in 1 second to keep checking
+    await ctx.scheduler.runAfter(1000, api.aurum.sessionManagerLoop);
+
+    // Update manager status
+    await ctx.runMutation(api.aurum.updateManagerStatus);
+  },
+});
+
+// Add this mutation
+export const updateManagerStatus = mutation({
+  handler: async (ctx) => {
+    const manager = await ctx.db
+      .query("system")
+      .withIndex("by_name", (q) => q.eq("name", "session_manager"))
+      .first();
+    if (manager) {
+      await ctx.db.patch(manager._id, { lastRun: Date.now() });
+    }
+  },
+});
+
+export const closeSession = mutation({
+  args: { sessionId: v.id("sessions") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.sessionId, { status: "closed" });
   },
 });
