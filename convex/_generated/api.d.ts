@@ -13,9 +13,10 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as aurum from "../aurum.js";
 import type * as auth from "../auth.js";
+import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
-import type * as myFunctions from "../myFunctions.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -26,9 +27,10 @@ import type * as myFunctions from "../myFunctions.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  aurum: typeof aurum;
   auth: typeof auth;
+  helpers: typeof helpers;
   http: typeof http;
-  myFunctions: typeof myFunctions;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,
