@@ -7,30 +7,31 @@ export const manageSession = internalAction({
     let currentSession = await ctx.runQuery(api.session.getCurrentSession);
 
     if (currentSession) {
-      if (currentSession.status === "open" && now > currentSession.endTime) {
+      // Check if session exists and get its full data
+      const fullSession = await ctx.runQuery(api.session.getSessionById, {
+        sessionId: currentSession._id,
+      });
+
+      if (!fullSession) return;
+
+      if (fullSession.status === "open" && now > fullSession.endTime) {
         // Move to processing phase
         await ctx.runMutation(api.session.updateSessionStatus, {
-          sessionId: currentSession._id,
+          sessionId: fullSession._id,
           status: "processing",
         });
       } else if (
-        currentSession.status === "processing" &&
-        now > currentSession.processingEndTime
+        fullSession.status === "processing" &&
+        now > fullSession.processingEndTime
       ) {
         // Process results and close session
         await ctx.runAction(api.session.processResults, {
-          sessionId: currentSession._id,
+          sessionId: fullSession._id,
           finalPrice: Math.random() * 100,
         });
-
-        // Explicitly close the session after processing
-        await ctx.runMutation(api.session.updateSessionStatus, {
-          sessionId: currentSession._id,
-          status: "closed",
-        });
       } else if (
-        currentSession.status === "closed" &&
-        now > currentSession.processingEndTime
+        fullSession.status === "closed" &&
+        now > fullSession.processingEndTime
       ) {
         // Create new session
         await ctx.runMutation(api.session.createSession);

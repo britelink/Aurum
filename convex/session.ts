@@ -34,43 +34,47 @@ export const createSession = mutation({
 export const sessionManagerLoop = action({
   handler: async (ctx) => {
     const now = Date.now();
+    console.log(`[${new Date(now).toISOString()}] Checking session state`);
+
     let currentSession = await ctx.runQuery(api.session.getCurrentSession);
+    console.log("Current session:", currentSession);
 
     if (currentSession) {
-      // If betting period is over but processing hasn't started
       if (currentSession.status === "open" && now > currentSession.endTime) {
-        // Move to processing phase
+        console.log("Moving to processing phase");
         await ctx.runMutation(api.session.updateSessionStatus, {
           sessionId: currentSession._id,
           status: "processing",
         });
-      }
-      // If processing period is over but session isn't closed
-      else if (
+        console.log("Session now in processing phase");
+      } else if (
         currentSession.status === "processing" &&
         now > currentSession.processingEndTime
       ) {
-        // Process results and close session
+        console.log("Processing results and closing session");
         await ctx.runAction(api.session.processResults, {
           sessionId: currentSession._id,
           finalPrice: Math.random() * 100,
         });
 
-        // Explicitly close the session
+        console.log("Explicitly closing session");
         await ctx.runMutation(api.session.updateSessionStatus, {
           sessionId: currentSession._id,
           status: "closed",
         });
-      }
-      // Only create new session after the previous one is fully closed
-      else if (
+        console.log("Session closed");
+      } else if (
         currentSession.status === "closed" &&
         now > currentSession.processingEndTime
       ) {
+        console.log("Creating new session");
         await ctx.runMutation(api.session.createSession);
+        console.log("New session created");
       }
     } else {
+      console.log("No active session found, creating first session");
       await ctx.runMutation(api.session.createSession);
+      console.log("First session created");
     }
 
     // Schedule next check
@@ -81,10 +85,21 @@ export const sessionManagerLoop = action({
 // Get current session
 export const getCurrentSession = query({
   handler: async (ctx) => {
-    return await ctx.db
+    // First try to get an open session
+    const openSession = await ctx.db
       .query("sessions")
       .withIndex("by_status", (q) => q.eq("status", "open"))
       .first();
+
+    if (openSession) return openSession;
+
+    // If no open session, try to get a processing session
+    const processingSession = await ctx.db
+      .query("sessions")
+      .withIndex("by_status", (q) => q.eq("status", "processing"))
+      .first();
+
+    return processingSession;
   },
 });
 
@@ -259,11 +274,18 @@ export const updateSessionStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.sessionId, {
+    console.log(`Updating session ${args.sessionId} to status ${args.status}`);
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) throw new Error("Session not found");
+
+    const update = {
       status: args.status,
-      finalPrice: args.finalPrice,
-      winner: args.winner,
-    });
+      ...(args.finalPrice !== undefined && { finalPrice: args.finalPrice }),
+      ...(args.winner !== undefined && { winner: args.winner }),
+    };
+
+    await ctx.db.patch(args.sessionId, update);
+    console.log(`Session ${args.sessionId} updated successfully`);
   },
 });
 
