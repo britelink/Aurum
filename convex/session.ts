@@ -5,7 +5,7 @@ import { Id } from "./_generated/dataModel";
 
 // Constants for session timing
 const BETTING_PERIOD = 5000; // 5 seconds for betting
-const PROCESSING_PERIOD = 10000; // 10 seconds for processing
+const PROCESSING_PERIOD = 10000; // 10 seconds for price movement
 const TOTAL_SESSION_DURATION = BETTING_PERIOD + PROCESSING_PERIOD;
 
 // Create a new session
@@ -35,15 +35,15 @@ export const sessionManagerLoop = action({
     let currentSession = await ctx.runQuery(api.session.getCurrentSession);
 
     if (currentSession) {
-      // If betting period is over, close the session
+      // If betting period is over but processing hasn't started
       if (currentSession.status === "open" && now > currentSession.endTime) {
         await ctx.runMutation(api.session.closeSession, {
           sessionId: currentSession._id,
         });
 
-        // Schedule result processing after betting period
+        // Wait for processing period to complete before processing results
         await ctx.scheduler.runAfter(
-          BETTING_PERIOD,
+          PROCESSING_PERIOD,
           api.session.processResults,
           {
             sessionId: currentSession._id,
@@ -51,25 +51,18 @@ export const sessionManagerLoop = action({
           },
         );
       }
-      // If processing period is over, start new session
+      // Only create new session after both betting and processing periods
       else if (
         currentSession.status === "closed" &&
-        now > currentSession.startTime + TOTAL_SESSION_DURATION
+        now > currentSession.startTime + BETTING_PERIOD + PROCESSING_PERIOD
       ) {
-        const sessionId = await ctx.runMutation(api.session.createSession);
-        currentSession = await ctx.runQuery(api.session.getSessionById, {
-          sessionId,
-        });
+        await ctx.runMutation(api.session.createSession);
       }
     } else {
-      // If no session exists, create one
-      const sessionId = await ctx.runMutation(api.session.createSession);
-      currentSession = await ctx.runQuery(api.session.getSessionById, {
-        sessionId,
-      });
+      await ctx.runMutation(api.session.createSession);
     }
 
-    // Schedule next check in 1 second
+    // Schedule next check
     await ctx.scheduler.runAfter(1000, api.session.sessionManagerLoop);
   },
 });

@@ -80,9 +80,37 @@ function SignOutButton() {
 }
 
 function Balance({ balance }: { balance: number }) {
+  const depositFunds = useMutation(api.aurum.depositFunds);
+  const [isDepositing, setIsDepositing] = React.useState(false);
+
+  const handleDeposit = async () => {
+    try {
+      setIsDepositing(true);
+      await depositFunds({
+        amount: 10,
+        paymentMethod: "eco-usd",
+      });
+    } catch (error) {
+      console.error("Failed to deposit:", error);
+    } finally {
+      setIsDepositing(false);
+    }
+  };
+
   return (
     <div className="p-4 bg-gray-800 rounded shadow-sm text-center">
       <p className="text-lg text-white">Your Balance: ${balance}</p>
+      {balance === 0 && (
+        <button
+          onClick={handleDeposit}
+          disabled={isDepositing}
+          className={`mt-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors ${
+            isDepositing ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          {isDepositing ? "Depositing..." : "Deposit $10"}
+        </button>
+      )}
     </div>
   );
 }
@@ -96,6 +124,9 @@ function Session({ session }: { session: Session }) {
   const [winner, setWinner] = React.useState(session?.winner);
   const [priceDirection, setPriceDirection] =
     React.useState<PriceDirection>(null);
+  const [phase, setPhase] = React.useState<
+    "betting" | "processing" | "results"
+  >("betting");
 
   React.useEffect(() => {
     if (!session) return;
@@ -106,14 +137,14 @@ function Session({ session }: { session: Session }) {
 
       if (diff > 0) {
         setTimeLeft(Math.ceil(diff / 1000));
+        setPhase("betting");
         setSessionStatus("open");
-        setWinner(undefined);
       } else if (now < session.endTime + 10000) {
-        setTimeLeft(0);
+        setTimeLeft(Math.ceil((session.endTime + 10000 - now) / 1000));
+        setPhase("processing");
         setSessionStatus("processing");
-        // Price direction is now handled by the TradingChart component
-        // through the onPriceUpdate prop callback
       } else {
+        setPhase("results");
         setSessionStatus("closed");
         setWinner(session.winner);
       }
@@ -127,37 +158,34 @@ function Session({ session }: { session: Session }) {
   return (
     <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
       <h2 className="text-xl font-bold mb-4 text-white">Current Session</h2>
-      <p className="mb-2 text-gray-300">
-        Neutral Axis: {session.neutralAxis.toFixed(2)}
-      </p>
 
-      {sessionStatus === "open" && (
-        <div>
+      {phase === "betting" && (
+        <>
           <p className="mb-4 text-gray-300">Betting ends in: {timeLeft}s</p>
           <BettingButtons session={session} placeBet={placeBet} />
-        </div>
+        </>
       )}
 
-      {sessionStatus === "processing" && (
-        <div>
-          <p className="mb-4 text-yellow-300">Processing results...</p>
+      {phase === "processing" && (
+        <>
+          <p className="mb-4 text-yellow-300">
+            Price Movement Phase: {timeLeft}s remaining
+          </p>
           {priceDirection && (
             <p className="text-xl font-bold text-white">
-              Price is going {priceDirection}! 🚀
+              Trending {priceDirection}! 🚀
             </p>
           )}
-        </div>
+        </>
       )}
 
-      {sessionStatus === "closed" && winner && (
-        <WinnerDisplay winner={winner} />
-      )}
+      {phase === "results" && winner && <WinnerDisplay winner={winner} />}
 
       <TradingChart
         neutralAxis={session.neutralAxis}
         sessionEndTime={session.endTime}
         onPriceUpdate={(price: number) => {
-          if (sessionStatus === "processing") {
+          if (phase === "processing") {
             setPriceDirection(price > session.neutralAxis ? "up" : "down");
           }
         }}

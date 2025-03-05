@@ -1,6 +1,9 @@
 import { internalAction } from "./_generated/server";
 import { api } from "./_generated/api";
 
+const BETTING_PERIOD = 5000;
+const PROCESSING_PERIOD = 10000;
+
 export const manageSession = internalAction({
   handler: async (ctx) => {
     const now = Date.now();
@@ -19,7 +22,7 @@ export const manageSession = internalAction({
         });
       } else if (
         currentSession.status === "closed" &&
-        now > currentSession.startTime + 15000 // 15 seconds total cycle
+        now > currentSession.startTime + BETTING_PERIOD + PROCESSING_PERIOD
       ) {
         // Create new session
         await ctx.runMutation(api.session.createSession);

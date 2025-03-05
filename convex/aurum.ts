@@ -19,7 +19,7 @@ export const placeBet = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
-    const userId = identity.subject.split("|")[1] as Id<"users">;
+    const userId = identity.subject.split("|")[0] as Id<"users">;
 
     // Ensure session exists and is open
     const session = await ctx.db.get(args.sessionId);
@@ -56,26 +56,50 @@ export const depositFunds = mutation({
     paymentMethod: v.union(v.literal("eco-usd"), v.literal("cash")),
   },
   handler: async (ctx, args) => {
+    console.log("Starting depositFunds mutation");
+
     const identity = await ctx.auth.getUserIdentity();
+    console.log("Auth identity:", identity);
+
     if (!identity) throw new Error("Not authenticated");
 
-    const userId = identity.subject.split("|")[1] as Id<"users">;
+    // Get the actual user ID from the identity
+    const userId = identity.subject.split("|")[0] as Id<"users">;
+    console.log("Parsed userId:", userId);
+
     const user = await ctx.db.get(userId);
-    if (!user) throw new Error("User not found");
+    console.log("Found user:", user);
 
-    await ctx.db.patch(userId, {
-      balance: (user.balance || 0) + args.amount,
-    });
+    if (!user) {
+      throw new Error("User not found");
+    }
 
-    return await ctx.db.insert("transactions", {
-      userId,
-      amount: args.amount,
-      type: "deposit",
-      status: "completed",
-      fee: undefined,
-      timestamp: Date.now(),
-      paymentMethod: args.paymentMethod,
-    });
+    console.log("Current balance:", user.balance);
+    console.log("Adding amount:", args.amount);
+
+    try {
+      // Update existing user's balance
+      await ctx.db.patch(userId, {
+        balance: (user.balance || 0) + args.amount,
+      });
+      console.log("Successfully updated balance");
+
+      const transaction = await ctx.db.insert("transactions", {
+        userId,
+        amount: args.amount,
+        type: "deposit",
+        status: "completed",
+        fee: undefined,
+        timestamp: Date.now(),
+        paymentMethod: args.paymentMethod,
+      });
+      console.log("Created transaction:", transaction);
+
+      return transaction;
+    } catch (error) {
+      console.error("Error in depositFunds:", error);
+      throw error;
+    }
   },
 });
 
@@ -88,7 +112,7 @@ export const withdrawFunds = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
-    const userId = identity.subject.split("|")[1] as Id<"users">;
+    const userId = identity.subject.split("|")[0] as Id<"users">;
     const user = await ctx.db.get(userId);
     if (!user) throw new Error("User not found");
     if ((user.balance || 0) < args.amount)
@@ -119,7 +143,7 @@ export const recordAdminAction = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
-    const userId = identity.subject.split("|")[1] as Id<"users">;
+    const userId = identity.subject.split("|")[0] as Id<"users">;
     const user = await ctx.db.get(userId);
     if (!user || user.role !== "admin") {
       throw new Error("Unauthorized: Admin access required");
@@ -139,7 +163,14 @@ export const getCurrentUser = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
 
-    const userId = identity.subject.split("|")[1] as Id<"users">;
-    return await ctx.db.get(userId);
+    // Get the actual user ID from the identity
+    const userId = identity.subject.split("|")[0] as Id<"users">;
+    const user = await ctx.db.get(userId);
+
+    if (!user) {
+      return null;
+    }
+
+    return user;
   },
 });

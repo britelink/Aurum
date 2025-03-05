@@ -38,30 +38,37 @@ export function TradingChart({
 }: TradingChartProps) {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [lastPrice, setLastPrice] = useState(neutralAxis);
+  const [trend, setTrend] = useState<"up" | "down">(() =>
+    Math.random() > 0.5 ? "up" : "down",
+  );
 
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
-      const newPrice = lastPrice + (Math.random() - 0.5) * 2;
-      setLastPrice(newPrice);
-      onPriceUpdate(newPrice);
+      // During processing period, move price in the chosen direction
+      if (now > sessionEndTime && now < sessionEndTime + 10000) {
+        const movement = trend === "up" ? 1 : -1;
+        const newPrice = lastPrice + movement + (Math.random() - 0.5);
+        setLastPrice(newPrice);
+        onPriceUpdate(newPrice);
 
-      setChartData((prev) => {
-        const newData = [
-          ...prev,
-          {
-            time: new Date().toLocaleTimeString(),
-            price: newPrice,
-            neutralAxis,
-          },
-        ];
-        if (newData.length > 20) newData.shift();
-        return newData;
-      });
-    }, 1000);
+        setChartData((prev) => {
+          const newData = [
+            ...prev,
+            {
+              time: new Date().toLocaleTimeString(),
+              price: newPrice,
+              neutralAxis,
+            },
+          ];
+          if (newData.length > 20) newData.shift();
+          return newData;
+        });
+      }
+    }, 500);
 
     return () => clearInterval(interval);
-  }, [lastPrice, neutralAxis, onPriceUpdate]);
+  }, [lastPrice, neutralAxis, sessionEndTime, trend, onPriceUpdate]);
 
   return (
     <Card>
@@ -81,7 +88,7 @@ export function TradingChart({
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="time" tick={{ fill: "#8884d8", fontSize: 12 }} />
           <YAxis
-            domain={["auto", "auto"]}
+            domain={[neutralAxis - 20, neutralAxis + 20]}
             tick={{ fill: "#8884d8", fontSize: 12 }}
           />
           <Tooltip />
