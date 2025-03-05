@@ -1,18 +1,28 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React from "react";
 import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TradingChart } from "@/components/BettingChart";
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@/convex/_generated/dataModel";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  ArrowUpIcon,
+  ArrowDownIcon,
+  BarChart2Icon,
+  DollarSignIcon,
+} from "lucide-react";
 
 interface Session {
   _id: Id<"sessions">;
-  status: "open" | "closed" | "pending";
+  status: "open" | "closed" | "pending" | "processing";
   endTime: number;
+  processingEndTime: number;
   neutralAxis: number;
   winner?: "buyers" | "sellers" | "neutral";
 }
@@ -35,27 +45,52 @@ export default function Home() {
   const user = useQuery(api.aurum.getCurrentUser);
 
   if (!isAuthenticated) {
-    return <div>Please sign in to continue</div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-lg font-semibold mb-4">
+              Please sign in to continue
+            </p>
+            <Button asChild>
+              <Link href="/signin">Sign In</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
-    <>
-      <header className="sticky top-0 z-10 bg-background p-4 border-b-2 border-slate-200 dark:border-slate-800 flex justify-between items-center">
-        <h2 className="text-lg font-bold">Aurum Betting Platform</h2>
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
+      <header className="sticky top-0 z-10 bg-gray-800/80 backdrop-blur-sm p-4 border-b border-gray-700 flex justify-between items-center">
+        <h2 className="text-xl font-bold text-white">Aurum Betting Platform</h2>
         <SignOutButton />
       </header>
-      <main className="p-8 flex flex-col gap-8">
-        <h1 className="text-4xl font-bold text-center">Place Your Bets</h1>
-        <Balance balance={user?.balance || 0} />
-        <div className="flex flex-col items-center gap-4">
-          {currentSession ? (
-            <Session session={currentSession} />
-          ) : (
-            <p>Loading session...</p>
-          )}
+      <main className="container mx-auto p-4 md:p-8">
+        <h1 className="text-4xl font-bold text-center text-white mb-8">
+          Place Your Bets
+        </h1>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>Current Session</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {currentSession ? (
+                <Session session={currentSession} />
+              ) : (
+                <p className="text-center text-gray-400">Loading session...</p>
+              )}
+            </CardContent>
+          </Card>
+          <div className="space-y-8">
+            <Balance balance={user?.balance || 0} />
+            <BettingHistory />
+          </div>
         </div>
       </main>
-    </>
+    </div>
   );
 }
 
@@ -66,15 +101,15 @@ function SignOutButton() {
   return (
     <>
       {isAuthenticated && (
-        <button
-          className="bg-slate-200 dark:bg-slate-800 text-foreground rounded px-2 py-1"
+        <Button
+          variant="outline"
           onClick={async () => {
             await signOut();
             router.push("/signin");
           }}
         >
           Sign out
-        </button>
+        </Button>
       )}
     </>
   );
@@ -99,29 +134,34 @@ function Balance({ balance }: { balance: number }) {
   };
 
   return (
-    <div className="p-4 bg-gray-800 rounded shadow-sm text-center">
-      <p className="text-lg text-white">Your Balance: ${balance}</p>
-      {balance === 0 && (
-        <button
-          onClick={handleDeposit}
-          disabled={isDepositing}
-          className={`mt-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors ${
-            isDepositing ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-        >
-          {isDepositing ? "Depositing..." : "Deposit $10"}
-        </button>
-      )}
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center">
+          <DollarSignIcon className="mr-2" />
+          Balance
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-3xl font-bold mb-4">${balance.toFixed(2)}</p>
+        {balance === 0 && (
+          <Button
+            onClick={handleDeposit}
+            disabled={isDepositing}
+            className="w-full"
+          >
+            {isDepositing ? "Depositing..." : "Deposit $10"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
 function Session({ session }: { session: Session }) {
   const placeBet = useMutation(api.aurum.placeBet);
   const [timeLeft, setTimeLeft] = React.useState(0);
-  const [priceDirection, setPriceDirection] = React.useState<
-    "up" | "down" | null
-  >(null);
+  const [priceDirection, setPriceDirection] =
+    React.useState<PriceDirection>(null);
 
   React.useEffect(() => {
     if (!session) return;
@@ -149,21 +189,25 @@ function Session({ session }: { session: Session }) {
   }, [session]);
 
   return (
-    <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
-      <h2 className="text-xl font-bold mb-4 text-white">Current Session</h2>
-
+    <div className="space-y-6">
       {session.status === "open" && (
         <>
-          <p className="mb-4 text-gray-300">Betting ends in: {timeLeft}s</p>
+          <div className="flex justify-between items-center">
+            <p className="text-lg font-semibold">Betting ends in:</p>
+            <p className="text-3xl font-bold text-yellow-400">{timeLeft}s</p>
+          </div>
           <BettingButtons session={session} placeBet={placeBet} />
         </>
       )}
 
       {session.status === "processing" && (
         <>
-          <p className="mb-4 text-yellow-300">
-            Price Movement Phase: {timeLeft}s remaining
-          </p>
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-lg font-semibold">Price Movement Phase:</p>
+            <p className="text-3xl font-bold text-yellow-400">
+              {timeLeft}s remaining
+            </p>
+          </div>
           <TradingChart
             neutralAxis={session.neutralAxis}
             session={session}
@@ -184,74 +228,50 @@ function Session({ session }: { session: Session }) {
 function BettingButtons({ session, placeBet }: BettingButtonsProps) {
   return (
     <div className="grid grid-cols-2 gap-4">
-      <button
-        className={`bg-green-600 text-white p-3 rounded transition-colors ${
-          session.status !== "open"
-            ? "opacity-50 cursor-not-allowed"
-            : "hover:bg-green-700"
-        }`}
+      <Button
+        variant="outline"
+        size="lg"
+        className="bg-green-600 hover:bg-green-700 text-white"
         disabled={session.status !== "open"}
         onClick={() =>
-          placeBet({
-            sessionId: session._id,
-            amount: 1,
-            direction: "up",
-          })
+          placeBet({ sessionId: session._id, amount: 1, direction: "up" })
         }
       >
-        Bet $1 (Up)
-      </button>
-      <button
-        className={`bg-red-600 text-white p-3 rounded transition-colors ${
-          session.status !== "open"
-            ? "opacity-50 cursor-not-allowed"
-            : "hover:bg-red-700"
-        }`}
+        <ArrowUpIcon className="mr-2" /> Bet $1 (Up)
+      </Button>
+      <Button
+        variant="outline"
+        size="lg"
+        className="bg-red-600 hover:bg-red-700 text-white"
         disabled={session.status !== "open"}
         onClick={() =>
-          placeBet({
-            sessionId: session._id,
-            amount: 1,
-            direction: "down",
-          })
+          placeBet({ sessionId: session._id, amount: 1, direction: "down" })
         }
       >
-        Bet $1 (Down)
-      </button>
-      <button
-        className={`bg-green-700 text-white p-3 rounded transition-colors ${
-          session.status !== "open"
-            ? "opacity-50 cursor-not-allowed"
-            : "hover:bg-green-800"
-        }`}
+        <ArrowDownIcon className="mr-2" /> Bet $1 (Down)
+      </Button>
+      <Button
+        variant="outline"
+        size="lg"
+        className="bg-green-700 hover:bg-green-800 text-white"
         disabled={session.status !== "open"}
         onClick={() =>
-          placeBet({
-            sessionId: session._id,
-            amount: 2,
-            direction: "up",
-          })
+          placeBet({ sessionId: session._id, amount: 2, direction: "up" })
         }
       >
-        Bet $2 (Up)
-      </button>
-      <button
-        className={`bg-red-700 text-white p-3 rounded transition-colors ${
-          session.status !== "open"
-            ? "opacity-50 cursor-not-allowed"
-            : "hover:bg-red-800"
-        }`}
+        <ArrowUpIcon className="mr-2" /> Bet $2 (Up)
+      </Button>
+      <Button
+        variant="outline"
+        size="lg"
+        className="bg-red-700 hover:bg-red-800 text-white"
         disabled={session.status !== "open"}
         onClick={() =>
-          placeBet({
-            sessionId: session._id,
-            amount: 2,
-            direction: "down",
-          })
+          placeBet({ sessionId: session._id, amount: 2, direction: "down" })
         }
       >
-        Bet $2 (Down)
-      </button>
+        <ArrowDownIcon className="mr-2" /> Bet $2 (Down)
+      </Button>
     </div>
   );
 }
@@ -262,9 +282,66 @@ function WinnerDisplay({
   winner: "buyers" | "sellers" | "neutral";
 }) {
   return (
-    <p className="mb-4 text-green-300">
-      Winner:{" "}
-      {winner === "buyers" ? "Up" : winner === "sellers" ? "Down" : "Tie"}
-    </p>
+    <div className="text-center p-6 bg-gray-700 rounded-lg">
+      <h3 className="text-2xl font-bold mb-2">Session Result</h3>
+      <p className="text-3xl font-bold text-green-400">
+        Winner:{" "}
+        {winner === "buyers" ? "Up" : winner === "sellers" ? "Down" : "Tie"}
+      </p>
+    </div>
+  );
+}
+
+function BettingHistory() {
+  // This is a placeholder. You would typically fetch this data from your API.
+  const history = [
+    { id: 1, date: "2023-05-01", amount: 1, direction: "up", result: "win" },
+    { id: 2, date: "2023-05-02", amount: 2, direction: "down", result: "loss" },
+    { id: 3, date: "2023-05-03", amount: 1, direction: "up", result: "win" },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center">
+          <BarChart2Icon className="mr-2" />
+          Betting History
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Tabs defaultValue="all">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="wins">Wins</TabsTrigger>
+            <TabsTrigger value="losses">Losses</TabsTrigger>
+          </TabsList>
+          <TabsContent value="all">
+            <ul className="space-y-2">
+              {history.map((bet) => (
+                <li
+                  key={bet.id}
+                  className="flex justify-between items-center p-2 bg-gray-700 rounded"
+                >
+                  <span>{new Date(bet.date).toLocaleDateString()}</span>
+                  <span
+                    className={
+                      bet.result === "win" ? "text-green-400" : "text-red-400"
+                    }
+                  >
+                    ${bet.amount} {bet.direction === "up" ? "↑" : "↓"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </TabsContent>
+          <TabsContent value="wins">
+            {/* Filter and display only wins */}
+          </TabsContent>
+          <TabsContent value="losses">
+            {/* Filter and display only losses */}
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
   );
 }
