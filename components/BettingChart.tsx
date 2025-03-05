@@ -38,7 +38,15 @@ interface ChartDataPoint {
   neutralAxis: number;
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: any[];
+  label?: string;
+}) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-background border border-border p-2 rounded-md shadow-md">

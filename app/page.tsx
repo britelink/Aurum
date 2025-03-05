@@ -27,7 +27,6 @@ interface Session {
   winner?: "buyers" | "sellers" | "neutral";
 }
 
-type SessionStatus = "open" | "closed" | "pending" | "processing";
 type PriceDirection = "up" | "down" | null;
 
 interface BettingButtonsProps {
