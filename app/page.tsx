@@ -8,26 +8,34 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TradingChart } from "@/components/BettingChart";
 
+interface Session {
+  _id: Id<"sessions">;
+  status: "open" | "closed" | "pending";
+  endTime: number;
+  neutralAxis: number;
+  winner?: "buyers" | "sellers" | "neutral";
+}
+
+type SessionStatus = "open" | "closed" | "pending" | "processing";
+type PriceDirection = "up" | "down" | null;
+
+interface BettingButtonsProps {
+  session: Session;
+  placeBet: (args: {
+    sessionId: Id<"sessions">;
+    amount: 1 | 2;
+    direction: "up" | "down";
+  }) => Promise<any>;
+}
+
 export default function Home() {
-  // For our MVP, we assume a default free balance of $10.
-  // In production, you'd fetch the current balance from the user record.
-  const [balance, setBalance] = React.useState(10);
-  const depositFunds = useMutation(api.aurum.depositFunds);
-  const joinActiveSession = useMutation(api.aurum.joinActiveSession);
-  const currentSession = useQuery(api.aurum.getCurrentSession);
-  const startSessionManager = useMutation(api.aurum.startSessionManager);
+  const { isAuthenticated } = useConvexAuth();
+  const currentSession = useQuery(api.session.getCurrentSession);
+  const user = useQuery(api.aurum.getCurrentUser);
 
-  // On mount, ensure there's an active session.
-  React.useEffect(() => {
-    (async () => {
-      await joinActiveSession({});
-    })();
-  }, [joinActiveSession]);
-
-  // Start session manager on mount
-  useEffect(() => {
-    startSessionManager();
-  }, [startSessionManager]);
+  if (!isAuthenticated) {
+    return <div>Please sign in to continue</div>;
+  }
 
   return (
     <>
@@ -37,18 +45,8 @@ export default function Home() {
       </header>
       <main className="p-8 flex flex-col gap-8">
         <h1 className="text-4xl font-bold text-center">Place Your Bets</h1>
-        <Balance balance={balance} />
+        <Balance balance={user?.balance || 0} />
         <div className="flex flex-col items-center gap-4">
-          <button
-            className="bg-blue-500 text-white px-4 py-2 rounded"
-            onClick={async () => {
-              // For MVP testing, allow user to receive free funds.
-              await depositFunds({ amount: 10, paymentMethod: "eco-usd" });
-              setBalance((prev) => prev + 10);
-            }}
-          >
-            Get Free $10
-          </button>
           {currentSession ? (
             <Session session={currentSession} />
           ) : (
@@ -89,15 +87,16 @@ function Balance({ balance }: { balance: number }) {
   );
 }
 
-function Session({ session }: { session: any }) {
+function Session({ session }: { session: Session }) {
   const placeBet = useMutation(api.aurum.placeBet);
   const [timeLeft, setTimeLeft] = React.useState(0);
-  const [sessionStatus, setSessionStatus] = React.useState(
-    session?.status || "closed",
+  const [sessionStatus, setSessionStatus] = React.useState<SessionStatus>(
+    session?.status,
   );
   const [winner, setWinner] = React.useState(session?.winner);
+  const [priceDirection, setPriceDirection] =
+    React.useState<PriceDirection>(null);
 
-  // Update timer and status
   React.useEffect(() => {
     if (!session) return;
 
@@ -105,20 +104,15 @@ function Session({ session }: { session: any }) {
       const now = Date.now();
       const diff = session.endTime - now;
 
-      console.log("Session status check:", {
-        now,
-        endTime: session.endTime,
-        diff,
-        status: session.status,
-      });
-
       if (diff > 0) {
         setTimeLeft(Math.ceil(diff / 1000));
         setSessionStatus("open");
-        setWinner(null);
+        setWinner(undefined);
       } else if (now < session.endTime + 10000) {
         setTimeLeft(0);
         setSessionStatus("processing");
+        // Price direction is now handled by the TradingChart component
+        // through the onPriceUpdate prop callback
       } else {
         setSessionStatus("closed");
         setWinner(session.winner);
@@ -130,8 +124,6 @@ function Session({ session }: { session: any }) {
     return () => clearInterval(interval);
   }, [session]);
 
-  if (!session) return null;
-
   return (
     <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
       <h2 className="text-xl font-bold mb-4 text-white">Current Session</h2>
@@ -139,95 +131,125 @@ function Session({ session }: { session: any }) {
         Neutral Axis: {session.neutralAxis.toFixed(2)}
       </p>
 
-      <p className="mb-4 text-gray-300">Debug: Status - {sessionStatus}</p>
-
       {sessionStatus === "open" && (
-        <p className="mb-4 text-gray-300">
-          Betting ends in: {timeLeft} second{timeLeft === 1 ? "" : "s"}
-        </p>
+        <div>
+          <p className="mb-4 text-gray-300">Betting ends in: {timeLeft}s</p>
+          <BettingButtons session={session} placeBet={placeBet} />
+        </div>
       )}
 
       {sessionStatus === "processing" && (
-        <p className="mb-4 text-yellow-300">Processing results...</p>
+        <div>
+          <p className="mb-4 text-yellow-300">Processing results...</p>
+          {priceDirection && (
+            <p className="text-xl font-bold text-white">
+              Price is going {priceDirection}! 🚀
+            </p>
+          )}
+        </div>
       )}
 
       {sessionStatus === "closed" && winner && (
-        <p className="mb-4 text-green-300">
-          Winner:{" "}
-          {winner === "buyers" ? "Up" : winner === "sellers" ? "Down" : "Tie"}
-        </p>
+        <WinnerDisplay winner={winner} />
       )}
-      <TradingChart />
-      <div className="grid grid-cols-2 gap-4">
-        <button
-          className={`bg-green-600 text-white p-3 rounded transition-colors ${
-            sessionStatus !== "open"
-              ? "opacity-50 cursor-not-allowed"
-              : "hover:bg-green-700"
-          }`}
-          disabled={sessionStatus !== "open"}
-          onClick={() =>
-            placeBet({
-              sessionId: session._id,
-              amount: 1,
-              direction: "up",
-            })
+
+      <TradingChart
+        neutralAxis={session.neutralAxis}
+        sessionEndTime={session.endTime}
+        onPriceUpdate={(price: number) => {
+          if (sessionStatus === "processing") {
+            setPriceDirection(price > session.neutralAxis ? "up" : "down");
           }
-        >
-          Bet $1 (Up)
-        </button>
-        <button
-          className={`bg-red-600 text-white p-3 rounded transition-colors ${
-            sessionStatus !== "open"
-              ? "opacity-50 cursor-not-allowed"
-              : "hover:bg-red-700"
-          }`}
-          disabled={sessionStatus !== "open"}
-          onClick={() =>
-            placeBet({
-              sessionId: session._id,
-              amount: 1,
-              direction: "down",
-            })
-          }
-        >
-          Bet $1 (Down)
-        </button>
-        <button
-          className={`bg-green-700 text-white p-3 rounded transition-colors ${
-            sessionStatus !== "open"
-              ? "opacity-50 cursor-not-allowed"
-              : "hover:bg-green-800"
-          }`}
-          disabled={sessionStatus !== "open"}
-          onClick={() =>
-            placeBet({
-              sessionId: session._id,
-              amount: 2,
-              direction: "up",
-            })
-          }
-        >
-          Bet $2 (Up)
-        </button>
-        <button
-          className={`bg-red-700 text-white p-3 rounded transition-colors ${
-            sessionStatus !== "open"
-              ? "opacity-50 cursor-not-allowed"
-              : "hover:bg-red-800"
-          }`}
-          disabled={sessionStatus !== "open"}
-          onClick={() =>
-            placeBet({
-              sessionId: session._id,
-              amount: 2,
-              direction: "down",
-            })
-          }
-        >
-          Bet $2 (Down)
-        </button>
-      </div>
+        }}
+      />
     </div>
+  );
+}
+
+function BettingButtons({ session, placeBet }: BettingButtonsProps) {
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <button
+        className={`bg-green-600 text-white p-3 rounded transition-colors ${
+          session.status !== "open"
+            ? "opacity-50 cursor-not-allowed"
+            : "hover:bg-green-700"
+        }`}
+        disabled={session.status !== "open"}
+        onClick={() =>
+          placeBet({
+            sessionId: session._id,
+            amount: 1,
+            direction: "up",
+          })
+        }
+      >
+        Bet $1 (Up)
+      </button>
+      <button
+        className={`bg-red-600 text-white p-3 rounded transition-colors ${
+          session.status !== "open"
+            ? "opacity-50 cursor-not-allowed"
+            : "hover:bg-red-700"
+        }`}
+        disabled={session.status !== "open"}
+        onClick={() =>
+          placeBet({
+            sessionId: session._id,
+            amount: 1,
+            direction: "down",
+          })
+        }
+      >
+        Bet $1 (Down)
+      </button>
+      <button
+        className={`bg-green-700 text-white p-3 rounded transition-colors ${
+          session.status !== "open"
+            ? "opacity-50 cursor-not-allowed"
+            : "hover:bg-green-800"
+        }`}
+        disabled={session.status !== "open"}
+        onClick={() =>
+          placeBet({
+            sessionId: session._id,
+            amount: 2,
+            direction: "up",
+          })
+        }
+      >
+        Bet $2 (Up)
+      </button>
+      <button
+        className={`bg-red-700 text-white p-3 rounded transition-colors ${
+          session.status !== "open"
+            ? "opacity-50 cursor-not-allowed"
+            : "hover:bg-red-800"
+        }`}
+        disabled={session.status !== "open"}
+        onClick={() =>
+          placeBet({
+            sessionId: session._id,
+            amount: 2,
+            direction: "down",
+          })
+        }
+      >
+        Bet $2 (Down)
+      </button>
+    </div>
+  );
+}
+
+function WinnerDisplay({
+  winner,
+}: {
+  winner: "buyers" | "sellers" | "neutral";
+}) {
+  return (
+    <p className="mb-4 text-green-300">
+      Winner:{" "}
+      {winner === "buyers" ? "Up" : winner === "sellers" ? "Down" : "Tie"}
+    </p>
   );
 }

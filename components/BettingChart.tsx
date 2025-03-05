@@ -19,48 +19,49 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export function TradingChart() {
-  // chartData holds an array of objects with time and price.
-  const [chartData, setChartData] = useState<{ time: string; price: number }[]>(
-    [],
-  );
-  const [lastPrice, setLastPrice] = useState(100); // starting price
+interface TradingChartProps {
+  neutralAxis: number;
+  sessionEndTime: number;
+  onPriceUpdate: (price: number) => void;
+}
+
+interface ChartDataPoint {
+  time: string;
+  price: number;
+  neutralAxis: number;
+}
+
+export function TradingChart({
+  neutralAxis,
+  sessionEndTime,
+  onPriceUpdate,
+}: TradingChartProps) {
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [lastPrice, setLastPrice] = useState(neutralAxis);
 
   useEffect(() => {
-    // Initialize chart data with the last 20 seconds
-    const initialData = [];
-    const now = Date.now();
-    let price = lastPrice;
-    for (let i = 20; i > 0; i--) {
-      const time = new Date(now - i * 1000).toLocaleTimeString();
-      // Simulate a small fluctuation for initial data
-      price = price + (Math.random() - 0.5) * 2;
-      initialData.push({ time, price: Number(price.toFixed(2)) });
-    }
-    setChartData(initialData);
-    setLastPrice(price);
-
-    // Update the chart every second with a new price point.
     const interval = setInterval(() => {
-      const currentTime = new Date().toLocaleTimeString();
-      // Simulate price fluctuation (can replace with actual data source)
+      const now = Date.now();
       const newPrice = lastPrice + (Math.random() - 0.5) * 2;
-      setLastPrice(Number(newPrice.toFixed(2)));
-      const newDataPoint = {
-        time: currentTime,
-        price: Number(newPrice.toFixed(2)),
-      };
+      setLastPrice(newPrice);
+      onPriceUpdate(newPrice);
 
-      setChartData((prevData) => {
-        const newData = [...prevData, newDataPoint];
-        // Keep the last 20 data points
+      setChartData((prev) => {
+        const newData = [
+          ...prev,
+          {
+            time: new Date().toLocaleTimeString(),
+            price: newPrice,
+            neutralAxis,
+          },
+        ];
         if (newData.length > 20) newData.shift();
         return newData;
       });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [lastPrice]);
+  }, [lastPrice, neutralAxis, onPriceUpdate]);
 
   return (
     <Card>
@@ -90,6 +91,12 @@ export function TradingChart() {
             stroke="#8884d8"
             fill="#8884d8"
             fillOpacity={0.4}
+          />
+          <Area
+            type="monotone"
+            dataKey="neutralAxis"
+            stroke="#82ca9d"
+            fill="#82ca9d"
           />
         </AreaChart>
       </CardContent>
