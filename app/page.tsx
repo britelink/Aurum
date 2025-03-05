@@ -7,6 +7,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TradingChart } from "@/components/BettingChart";
+import { Id } from "@/convex/_generated/dataModel";
 
 interface Session {
   _id: Id<"sessions">;
@@ -118,40 +119,24 @@ function Balance({ balance }: { balance: number }) {
 function Session({ session }: { session: Session }) {
   const placeBet = useMutation(api.aurum.placeBet);
   const [timeLeft, setTimeLeft] = React.useState(0);
-  const [sessionStatus, setSessionStatus] = React.useState<SessionStatus>(
-    session?.status,
-  );
-  const [winner, setWinner] = React.useState(session?.winner);
-  const [priceDirection, setPriceDirection] =
-    React.useState<PriceDirection>(null);
-  const [phase, setPhase] = React.useState<
-    "betting" | "processing" | "results"
-  >("betting");
+  const [priceDirection, setPriceDirection] = React.useState<
+    "up" | "down" | null
+  >(null);
 
   React.useEffect(() => {
     if (!session) return;
 
-    const updateStatus = () => {
+    const updateTimeLeft = () => {
       const now = Date.now();
-      const diff = session.endTime - now;
-
-      if (diff > 0) {
-        setTimeLeft(Math.ceil(diff / 1000));
-        setPhase("betting");
-        setSessionStatus("open");
-      } else if (now < session.endTime + 10000) {
-        setTimeLeft(Math.ceil((session.endTime + 10000 - now) / 1000));
-        setPhase("processing");
-        setSessionStatus("processing");
-      } else {
-        setPhase("results");
-        setSessionStatus("closed");
-        setWinner(session.winner);
+      if (session.status === "open") {
+        setTimeLeft(Math.ceil((session.endTime - now) / 1000));
+      } else if (session.status === "processing") {
+        setTimeLeft(Math.ceil((session.processingEndTime - now) / 1000));
       }
     };
 
-    updateStatus();
-    const interval = setInterval(updateStatus, 500);
+    updateTimeLeft();
+    const interval = setInterval(updateTimeLeft, 100);
     return () => clearInterval(interval);
   }, [session]);
 
@@ -159,37 +144,31 @@ function Session({ session }: { session: Session }) {
     <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
       <h2 className="text-xl font-bold mb-4 text-white">Current Session</h2>
 
-      {phase === "betting" && (
+      {session.status === "open" && (
         <>
           <p className="mb-4 text-gray-300">Betting ends in: {timeLeft}s</p>
           <BettingButtons session={session} placeBet={placeBet} />
         </>
       )}
 
-      {phase === "processing" && (
+      {session.status === "processing" && (
         <>
           <p className="mb-4 text-yellow-300">
             Price Movement Phase: {timeLeft}s remaining
           </p>
-          {priceDirection && (
-            <p className="text-xl font-bold text-white">
-              Trending {priceDirection}! 🚀
-            </p>
-          )}
+          <TradingChart
+            neutralAxis={session.neutralAxis}
+            session={session}
+            onPriceUpdate={(price: number) => {
+              setPriceDirection(price > session.neutralAxis ? "up" : "down");
+            }}
+          />
         </>
       )}
 
-      {phase === "results" && winner && <WinnerDisplay winner={winner} />}
-
-      <TradingChart
-        neutralAxis={session.neutralAxis}
-        sessionEndTime={session.endTime}
-        onPriceUpdate={(price: number) => {
-          if (phase === "processing") {
-            setPriceDirection(price > session.neutralAxis ? "up" : "down");
-          }
-        }}
-      />
+      {session.status === "closed" && session.winner && (
+        <WinnerDisplay winner={session.winner} />
+      )}
     </div>
   );
 }

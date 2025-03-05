@@ -29,12 +29,14 @@ export default defineSchema({
   sessions: defineTable({
     startTime: v.number(),
     endTime: v.number(),
+    processingEndTime: v.number(),
     neutralAxis: v.number(),
     totalBuyVolume: v.number(), // Total amount bet on 'up'
     totalSellVolume: v.number(), // Total amount bet on 'down'
     finalPrice: v.optional(v.number()),
     status: v.union(
       v.literal("open"),
+      v.literal("processing"),
       v.literal("closed"),
       v.literal("pending"),
     ),

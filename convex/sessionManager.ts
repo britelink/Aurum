@@ -1,9 +1,6 @@
 import { internalAction } from "./_generated/server";
 import { api } from "./_generated/api";
 
-const BETTING_PERIOD = 5000;
-const PROCESSING_PERIOD = 10000;
-
 export const manageSession = internalAction({
   handler: async (ctx) => {
     const now = Date.now();
@@ -11,18 +8,29 @@ export const manageSession = internalAction({
 
     if (currentSession) {
       if (currentSession.status === "open" && now > currentSession.endTime) {
-        // Close session and process results
-        await ctx.runMutation(api.session.closeSession, {
+        // Move to processing phase
+        await ctx.runMutation(api.session.updateSessionStatus, {
           sessionId: currentSession._id,
+          status: "processing",
         });
-
+      } else if (
+        currentSession.status === "processing" &&
+        now > currentSession.processingEndTime
+      ) {
+        // Process results and close session
         await ctx.runAction(api.session.processResults, {
           sessionId: currentSession._id,
           finalPrice: Math.random() * 100,
         });
+
+        // Explicitly close the session after processing
+        await ctx.runMutation(api.session.updateSessionStatus, {
+          sessionId: currentSession._id,
+          status: "closed",
+        });
       } else if (
         currentSession.status === "closed" &&
-        now > currentSession.startTime + BETTING_PERIOD + PROCESSING_PERIOD
+        now > currentSession.processingEndTime
       ) {
         // Create new session
         await ctx.runMutation(api.session.createSession);

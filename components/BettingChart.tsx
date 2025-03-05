@@ -21,7 +21,7 @@ import {
 
 interface TradingChartProps {
   neutralAxis: number;
-  sessionEndTime: number;
+  session: Session;
   onPriceUpdate: (price: number) => void;
 }
 
@@ -33,20 +33,21 @@ interface ChartDataPoint {
 
 export function TradingChart({
   neutralAxis,
-  sessionEndTime,
+  session,
   onPriceUpdate,
 }: TradingChartProps) {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [lastPrice, setLastPrice] = useState(neutralAxis);
-  const [trend, setTrend] = useState<"up" | "down">(() =>
+  const [trend] = useState<"up" | "down">(() =>
     Math.random() > 0.5 ? "up" : "down",
   );
 
   useEffect(() => {
+    if (session.status !== "processing") return;
+
     const interval = setInterval(() => {
       const now = Date.now();
-      // During processing period, move price in the chosen direction
-      if (now > sessionEndTime && now < sessionEndTime + 10000) {
+      if (now <= session.processingEndTime) {
         const movement = trend === "up" ? 1 : -1;
         const newPrice = lastPrice + movement + (Math.random() - 0.5);
         setLastPrice(newPrice);
@@ -68,7 +69,9 @@ export function TradingChart({
     }, 500);
 
     return () => clearInterval(interval);
-  }, [lastPrice, neutralAxis, sessionEndTime, trend, onPriceUpdate]);
+  }, [lastPrice, neutralAxis, session, trend, onPriceUpdate]);
+
+  if (session.status !== "processing") return null;
 
   return (
     <Card>

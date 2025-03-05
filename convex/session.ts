@@ -4,8 +4,8 @@ import { api } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
 // Constants for session timing
-const BETTING_PERIOD = 5000; // 5 seconds for betting
-const PROCESSING_PERIOD = 10000; // 10 seconds for price movement
+const BETTING_PERIOD = 30000; // 30 seconds for betting
+const PROCESSING_PERIOD = 30000; // 30 seconds for price movement
 const TOTAL_SESSION_DURATION = BETTING_PERIOD + PROCESSING_PERIOD;
 
 // Create a new session
@@ -13,11 +13,13 @@ export const createSession = mutation({
   handler: async (ctx) => {
     const startTime = Date.now();
     const endTime = startTime + BETTING_PERIOD;
+    const processingEndTime = endTime + PROCESSING_PERIOD;
     const neutralAxis = Math.random() * 100;
 
     return await ctx.db.insert("sessions", {
       startTime,
       endTime,
+      processingEndTime,
       neutralAxis,
       totalBuyVolume: 0,
       totalSellVolume: 0,
@@ -37,24 +39,33 @@ export const sessionManagerLoop = action({
     if (currentSession) {
       // If betting period is over but processing hasn't started
       if (currentSession.status === "open" && now > currentSession.endTime) {
-        await ctx.runMutation(api.session.closeSession, {
+        // Move to processing phase
+        await ctx.runMutation(api.session.updateSessionStatus, {
           sessionId: currentSession._id,
+          status: "processing",
+        });
+      }
+      // If processing period is over but session isn't closed
+      else if (
+        currentSession.status === "processing" &&
+        now > currentSession.processingEndTime
+      ) {
+        // Process results and close session
+        await ctx.runAction(api.session.processResults, {
+          sessionId: currentSession._id,
+          finalPrice: Math.random() * 100,
         });
 
-        // Wait for processing period to complete before processing results
-        await ctx.scheduler.runAfter(
-          PROCESSING_PERIOD,
-          api.session.processResults,
-          {
-            sessionId: currentSession._id,
-            finalPrice: Math.random() * 100,
-          },
-        );
+        // Explicitly close the session
+        await ctx.runMutation(api.session.updateSessionStatus, {
+          sessionId: currentSession._id,
+          status: "closed",
+        });
       }
-      // Only create new session after both betting and processing periods
+      // Only create new session after the previous one is fully closed
       else if (
         currentSession.status === "closed" &&
-        now > currentSession.startTime + BETTING_PERIOD + PROCESSING_PERIOD
+        now > currentSession.processingEndTime
       ) {
         await ctx.runMutation(api.session.createSession);
       }
@@ -238,6 +249,7 @@ export const updateSessionStatus = mutation({
     sessionId: v.id("sessions"),
     status: v.union(
       v.literal("open"),
+      v.literal("processing"),
       v.literal("closed"),
       v.literal("pending"),
     ),
