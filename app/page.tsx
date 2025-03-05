@@ -129,9 +129,17 @@ function Session({ session }: { session: Session }) {
     const updateTimeLeft = () => {
       const now = Date.now();
       if (session.status === "open") {
-        setTimeLeft(Math.ceil((session.endTime - now) / 1000));
+        const remaining = Math.max(
+          0,
+          Math.ceil((session.endTime - now) / 1000),
+        );
+        setTimeLeft(remaining);
       } else if (session.status === "processing") {
-        setTimeLeft(Math.ceil((session.processingEndTime - now) / 1000));
+        const remaining = Math.max(
+          0,
+          Math.ceil((session.processingEndTime - now) / 1000),
+        );
+        setTimeLeft(remaining);
       }
     };
 
