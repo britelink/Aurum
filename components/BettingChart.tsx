@@ -22,8 +22,9 @@ import {
 } from "@/components/ui/card";
 
 interface Session {
-  status: "processing" | "complete";
+  status: "open" | "processing" | "closed" | "pending";
   processingEndTime: number;
+  neutralAxis: number;
 }
 
 interface TradingChartProps {

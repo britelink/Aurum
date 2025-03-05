@@ -27,8 +27,6 @@ interface Session {
   winner?: "buyers" | "sellers" | "neutral";
 }
 
-type PriceDirection = "up" | "down" | null;
-
 interface BettingButtonsProps {
   session: Session;
   placeBet: (args: {
@@ -159,8 +157,10 @@ function Balance({ balance }: { balance: number }) {
 function Session({ session }: { session: Session }) {
   const placeBet = useMutation(api.aurum.placeBet);
   const [timeLeft, setTimeLeft] = React.useState(0);
-  const [priceDirection, setPriceDirection] =
-    React.useState<PriceDirection>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [priceDirection, setPriceDirection] = React.useState<
+    "up" | "down" | null
+  >(null);
 
   React.useEffect(() => {
     if (!session) return;
