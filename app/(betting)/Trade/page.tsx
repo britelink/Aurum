@@ -1,10 +1,9 @@
-//@ts-nocheck
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React from "react";
 import { useQuery, useMutation, useConvexAuth } from "convex/react";
-import { api } from "../convex/_generated/api";
+
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -19,6 +18,7 @@ import {
   BarChart2Icon,
   DollarSignIcon,
 } from "lucide-react";
+import { api } from "@/convex/_generated/api";
 
 interface Session {
   _id: Id<"sessions">;
