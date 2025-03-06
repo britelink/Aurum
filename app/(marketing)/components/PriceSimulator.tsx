@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 "use client";
 import React, { useEffect, useState, useRef } from "react";
 
@@ -10,11 +8,11 @@ export default function PriceSimulator() {
   const [countDown, setCountDown] = useState(10);
   const [isActive, setIsActive] = useState(true);
   const [selectedBet, setSelectedBet] = useState<"up" | "down" | null>(null);
-  const [betAmount, setBetAmount] = useState<1 | 2>(1);
+  const [betAmount, setBetAmount] = useState<1 | 2 | 5 | 10 | 25 | 50>(1);
   const [result, setResult] = useState<"win" | "lose" | null>(null);
   const [balance, setBalance] = useState(1000);
   const [timeframe, setTimeframe] = useState("1M");
-  const [assetType, setAssetType] = useState("EUR/USD");
+  const [assetType] = useState("EUR/USD"); // Remove setter if not needed
   const [showTooltip, setShowTooltip] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -302,7 +300,7 @@ export default function PriceSimulator() {
       ctx.setLineDash([]);
 
       // Draw arrow indicating bet direction
-      const arrowY = selectedBet === "up" ? startY - 15 : startY + 15;
+      // const arrowY = selectedBet === "up" ? startY - 15 : startY + 15;
       ctx.fillStyle =
         selectedBet === "up"
           ? "rgba(16, 185, 129, 0.9)"
@@ -481,7 +479,7 @@ export default function PriceSimulator() {
           {[1, 2, 5, 10, 25, 50].map((amount) => (
             <button
               key={amount}
-              onClick={() => setBetAmount(amount as any)}
+              onClick={() => setBetAmount(amount as 1 | 2 | 5 | 10 | 25 | 50)}
               className={`px-3 py-1.5 rounded-md text-sm ${
                 betAmount === amount
                   ? "bg-blue-600 text-white dark:bg-blue-700"

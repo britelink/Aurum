@@ -27,9 +27,9 @@ export default function About() {
                 interfaces.
               </p>
               <p className="text-lg text-muted-foreground">
-                We're committed to building a community of traders who can enjoy
-                frequent opportunities to profit from their predictions while
-                maintaining responsible gaming practices.
+                We&apos;re committed to building a community of traders who can
+                enjoy frequent opportunities to profit from their predictions
+                while maintaining responsible gaming practices.
               </p>
             </div>
 
@@ -131,8 +131,8 @@ export default function About() {
                     2.
                   </span>
                   <span>
-                    Binary position options: "Above" or "Below" the neutral
-                    price axis
+                    Binary position options: &ldquo;Above&rdquo; or
+                    &ldquo;Below&rdquo; the neutral price axis
                   </span>
                 </li>
                 <li className="text-blue-800 dark:text-blue-100 flex items-start">
