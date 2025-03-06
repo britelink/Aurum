@@ -6,9 +6,10 @@ import {
   Check,
 } from "lucide-react";
 import Hero from "./components/Hero";
-import InfoCard from "./components/InforCard";
+
 import AurumButton from "@/components/AurumButton";
 import PriceSimulator from "./components/PriceSimulator";
+import InfoCard from "./components/InforCard";
 
 export default function Home() {
   return (
@@ -17,15 +18,16 @@ export default function Home() {
         title="Predict. Trade. Win."
         subtitle="Aurum Capital offers a new way to predict market movements with fixed-price bets and high returns on investment."
         secondaryCta="Learn More"
+        showChart={true}
       />
 
-      <section className="py-16 px-6 bg-gray-50 dark:bg-navy-900">
+      <section className="py-16 px-6 bg-gradient-to-br from-blue-50/80 to-slate-100/80 dark:from-slate-900 dark:to-blue-950/80">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-serif font-bold mb-4">
+            <h2 className="text-3xl font-serif font-bold mb-4 text-blue-800 dark:text-blue-300">
               How Aurum Works
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
+            <p className="text-lg text-blue-700 dark:text-blue-300 max-w-3xl mx-auto">
               Aurum is an online betting platform that allows users to predict
               market movements in a simple, fast, and rewarding way.
             </p>
@@ -36,29 +38,32 @@ export default function Home() {
               title="Quick 10-Second Sessions"
               description="Each game session lasts only 10 seconds followed by a 5-second cooldown, giving you multiple opportunities to win."
               icon={<Timer size={32} />}
+              className="bg-white dark:bg-slate-900/90 shadow-md hover:shadow-lg"
             />
             <InfoCard
               title="Fixed Price Bets"
               description="Place bets in fixed lots of $1 and $2, making it easy to manage your trading strategy and bankroll."
               icon={<DollarSign size={32} />}
+              className="bg-white dark:bg-slate-900/90 shadow-md hover:shadow-lg"
             />
             <InfoCard
               title="High ROI Potential"
               description="Win between 90% to over 100% returns on your initial bet with each successful prediction."
               icon={<TrendingUp size={32} />}
+              className="bg-white dark:bg-slate-900/90 shadow-md hover:shadow-lg"
             />
           </div>
         </div>
       </section>
 
-      <section className="py-16 px-6 bg-white dark:bg-navy-800">
+      <section className="py-16 px-6 bg-gradient-to-br from-slate-100 to-blue-50 dark:from-slate-900 dark:to-blue-950/70">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
-              <h2 className="text-3xl font-serif font-bold mb-4">
+              <h2 className="text-3xl font-serif font-bold mb-4 text-blue-800 dark:text-blue-300">
                 Experience Our Platform
               </h2>
-              <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
+              <p className="text-lg text-slate-600 dark:text-slate-300 mb-6">
                 Try our interactive demo to see how Aurum works. Predict whether
                 the price index will move up or down within the 10-second
                 window.
@@ -68,27 +73,27 @@ export default function Home() {
                 <li className="flex items-start">
                   <Check
                     size={20}
-                    className="text-gold-500 mt-1 mr-2 flex-shrink-0"
+                    className="text-emerald-500 dark:text-emerald-400 mt-1 mr-2 flex-shrink-0"
                   />
-                  <span className="text-gray-700 dark:text-gray-300">
+                  <span className="text-slate-600 dark:text-slate-300">
                     Place a bet on the direction of the price movement
                   </span>
                 </li>
                 <li className="flex items-start">
                   <Check
                     size={20}
-                    className="text-gold-500 mt-1 mr-2 flex-shrink-0"
+                    className="text-emerald-500 dark:text-emerald-400 mt-1 mr-2 flex-shrink-0"
                   />
-                  <span className="text-gray-700 dark:text-gray-300">
+                  <span className="text-slate-600 dark:text-slate-300">
                     Wait for the 10-second window to close
                   </span>
                 </li>
                 <li className="flex items-start">
                   <Check
                     size={20}
-                    className="text-gold-500 mt-1 mr-2 flex-shrink-0"
+                    className="text-emerald-500 dark:text-emerald-400 mt-1 mr-2 flex-shrink-0"
                   />
-                  <span className="text-gray-700 dark:text-gray-300">
+                  <span className="text-slate-600 dark:text-slate-300">
                     Win up to 100% return if your prediction is correct
                   </span>
                 </li>
@@ -104,12 +109,12 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="py-16 px-6 bg-navy-900 text-white">
+      <section className="py-16 px-6 bg-blue-900 dark:bg-blue-950 text-white">
         <div className="max-w-7xl mx-auto text-center">
-          <h2 className="text-3xl font-serif font-bold mb-4">
+          <h2 className="text-3xl font-serif font-bold mb-4 text-blue-100">
             Ready to Start Trading?
           </h2>
-          <p className="text-lg text-gray-300 mb-8 max-w-2xl mx-auto">
+          <p className="text-lg text-blue-200 mb-8 max-w-2xl mx-auto">
             Join thousands of traders who are already experiencing the Aurum
             advantage with high returns and rapid trading sessions.
           </p>
@@ -125,54 +130,54 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="py-16 px-6 bg-white dark:bg-navy-800">
+      <section className="py-16 px-6 bg-slate-100 dark:bg-slate-900">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-serif font-bold mb-4">
+            <h2 className="text-3xl font-serif font-bold mb-4 text-blue-800 dark:text-blue-300">
               Frequently Asked Questions
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
+            <p className="text-lg text-slate-600 dark:text-slate-300 max-w-3xl mx-auto">
               Get answers to the most common questions about Aurum Capital.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            <div className="bg-gray-50 dark:bg-navy-700 p-6 rounded-lg">
-              <h3 className="text-xl font-medium mb-2">
+            <div className="bg-white dark:bg-blue-900/30 p-6 rounded-lg shadow-md">
+              <h3 className="text-xl font-medium mb-2 text-blue-700 dark:text-blue-200">
                 How do I deposit funds?
               </h3>
-              <p className="text-gray-600 dark:text-gray-300">
+              <p className="text-slate-600 dark:text-slate-300">
                 You can deposit funds using ECO-USD or directly transfer money
                 between Aurum accounts. Our system ensures quick and secure
                 transactions.
               </p>
             </div>
 
-            <div className="bg-gray-50 dark:bg-navy-700 p-6 rounded-lg">
-              <h3 className="text-xl font-medium mb-2">
+            <div className="bg-white dark:bg-blue-900/30 p-6 rounded-lg shadow-md">
+              <h3 className="text-xl font-medium mb-2 text-blue-700 dark:text-blue-200">
                 What is the minimum bet?
               </h3>
-              <p className="text-gray-600 dark:text-gray-300">
+              <p className="text-slate-600 dark:text-slate-300">
                 Aurum offers fixed bet lots of $1 and $2 only, making it easy to
                 manage your trading strategy and risk.
               </p>
             </div>
 
-            <div className="bg-gray-50 dark:bg-navy-700 p-6 rounded-lg">
-              <h3 className="text-xl font-medium mb-2">
+            <div className="bg-white dark:bg-blue-900/30 p-6 rounded-lg shadow-md">
+              <h3 className="text-xl font-medium mb-2 text-blue-700 dark:text-blue-200">
                 How long does each session last?
               </h3>
-              <p className="text-gray-600 dark:text-gray-300">
+              <p className="text-slate-600 dark:text-slate-300">
                 Each trading session lasts 10 seconds for placing bets, followed
                 by a 5-second cooldown period before the next session begins.
               </p>
             </div>
 
-            <div className="bg-gray-50 dark:bg-navy-700 p-6 rounded-lg">
-              <h3 className="text-xl font-medium mb-2">
+            <div className="bg-white dark:bg-blue-900/30 p-6 rounded-lg shadow-md">
+              <h3 className="text-xl font-medium mb-2 text-blue-700 dark:text-blue-200">
                 What returns can I expect?
               </h3>
-              <p className="text-gray-600 dark:text-gray-300">
+              <p className="text-slate-600 dark:text-slate-300">
                 Winning predictions can yield returns ranging from 90% up to
                 more than 100% of your initial bet, depending on the session's
                 distribution.

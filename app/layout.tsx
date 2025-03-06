@@ -4,6 +4,8 @@ import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -43,13 +45,15 @@ export default function RootLayout({
 }>) {
   return (
     <ConvexAuthNextjsServerProvider>
-      <html lang="en">
-        <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        >
-          <ConvexClientProvider>{children}</ConvexClientProvider>
-        </body>
-      </html>
+      <ThemeProvider defaultTheme="system" storageKey="aurum-theme">
+        <html lang="en" suppressHydrationWarning>
+          <body
+            className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${playfair.variable} antialiased`}
+          >
+            <ConvexClientProvider>{children}</ConvexClientProvider>
+          </body>
+        </html>
+      </ThemeProvider>
     </ConvexAuthNextjsServerProvider>
   );
 }

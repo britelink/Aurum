@@ -10,30 +10,30 @@ export default function About() {
         subtitle="Redefining the online betting experience with innovative, transparent, and rewarding prediction markets."
       />
 
-      <section className="py-16 px-6 bg-white dark:bg-navy-800">
+      <section className="py-16 px-6 bg-background">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
               <h2 className="text-3xl font-serif font-bold mb-6">Our Vision</h2>
-              <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
+              <p className="text-lg text-muted-foreground mb-6">
                 Aurum Capital was founded with a clear vision: to create a
                 betting platform that is fair, transparent, and rewarding for
                 all participants.
               </p>
-              <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
+              <p className="text-lg text-muted-foreground mb-6">
                 Our innovative approach combines the excitement of rapid trading
                 with the simplicity of binary prediction, allowing users to
                 leverage their market intuition without complicated trading
                 interfaces.
               </p>
-              <p className="text-lg text-gray-600 dark:text-gray-300">
+              <p className="text-lg text-muted-foreground">
                 We're committed to building a community of traders who can enjoy
                 frequent opportunities to profit from their predictions while
                 maintaining responsible gaming practices.
               </p>
             </div>
 
-            <div className="bg-gray-50 dark:bg-navy-700 p-8 rounded-xl">
+            <div className="bg-card text-card-foreground p-8 rounded-xl">
               <h3 className="text-2xl font-serif font-bold mb-6 text-gold-500">
                 Key Advantages
               </h3>

@@ -16,10 +16,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" suppressHydrationWarning>
+      <body className="min-h-screen bg-background text-foreground">
         <Header />
-        <main className="min-h-screen pt-16">{children}</main>
+        <main className="pt-16">{children}</main>
         <Footer />
       </body>
     </html>
