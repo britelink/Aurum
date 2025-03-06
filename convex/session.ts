@@ -205,7 +205,7 @@ export const processResults = action({
 
     const feeAmount = losersTotal * 0.08;
     await ctx.runMutation(api.session.createTransaction, {
-      userId: "2001" as Id<"users">,
+      userId: "ks72xyybrjx4pt5qe4wbsanzf17bg56z" as Id<"users">, //carges to admin
       amount: feeAmount,
       type: "fee",
       status: "completed",
