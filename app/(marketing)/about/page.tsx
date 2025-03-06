@@ -1,4 +1,4 @@
-import { Shield, Target, TrendingUp, Users, Award } from "lucide-react";
+import { Shield, Target, TrendingUp, Award } from "lucide-react";
 import Hero from "../components/Hero";
 import AurumButton from "@/components/AurumButton";
 
@@ -98,8 +98,8 @@ export default function About() {
               Trading Mechanics
             </h2>
             <p className="text-lg text-blue-700 dark:text-blue-300 max-w-3xl mx-auto">
-              Aurum's proprietary algorithm ensures transparent and efficient
-              market operation
+              Aurum&apos;s proprietary algorithm ensures transparent and
+              efficient market operation
             </p>
           </div>
 
@@ -225,7 +225,7 @@ export default function About() {
             </h2>
             <p className="text-lg text-slate-700 dark:text-slate-300 max-w-3xl mx-auto">
               Aurum Capital delivers consistent performance metrics that
-              demonstrate our platform's reliability and potential.
+              demonstrate our platform&apos;s reliability and potential.
             </p>
           </div>
 
