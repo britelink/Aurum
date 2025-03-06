@@ -1,10 +1,4 @@
-import {
-  ChevronRight,
-  Timer,
-  DollarSign,
-  TrendingUp,
-  Check,
-} from "lucide-react";
+import { Timer, DollarSign, TrendingUp, Check } from "lucide-react";
 import Hero from "./components/Hero";
 
 import AurumButton from "@/components/AurumButton";
@@ -179,8 +173,8 @@ export default function Home() {
               </h3>
               <p className="text-slate-600 dark:text-slate-300">
                 Winning predictions can yield returns ranging from 90% up to
-                more than 100% of your initial bet, depending on the session's
-                distribution.
+                more than 100% of your initial bet, depending on the
+                session&apos;s distribution.
               </p>
             </div>
           </div>
