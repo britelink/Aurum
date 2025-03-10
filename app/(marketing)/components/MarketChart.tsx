@@ -2,29 +2,81 @@
 import React, { useEffect, useState, useRef } from "react";
 
 export default function MarketChart() {
-  const [currentPrice, setCurrentPrice] = useState(100);
+  const [currentPrice, setCurrentPrice] = useState(1.0825);
   const [priceHistory, setPriceHistory] = useState<number[]>([]);
   const [direction, setDirection] = useState(1);
   const chartRef = useRef<HTMLDivElement>(null);
+  const [trades, setTrades] = useState<
+    {
+      price: number;
+      position: string;
+      amount: number;
+      x: number;
+      y: number;
+    }[]
+  >([]);
 
-  // Generate initial price history
+  // Generate initial price history (5 minute simulation with more data points)
   useEffect(() => {
     const initialHistory: number[] = [];
-    let price = 100;
+    let price = 1.0825;
     let tempDirection = Math.random() > 0.5 ? 1 : -1;
 
-    for (let i = 0; i < 50; i++) {
-      if (Math.random() < 0.3) {
+    // Generate 300 points for 5 minutes (assuming 1 second intervals)
+    for (let i = 0; i < 300; i++) {
+      if (Math.random() < 0.15) {
         tempDirection *= -1;
       }
-      const change = tempDirection * (0.5 + Math.random() * 1);
+      // More realistic forex pip movements
+      const change = tempDirection * (0.00005 + Math.random() * 0.00015);
       price += change;
-      price = Math.max(90, Math.min(110, price));
+      // Set realistic bounds for EUR/USD
+      price = Math.max(1.0815, Math.min(1.0838, price));
       initialHistory.push(price);
     }
 
     setPriceHistory(initialHistory);
     setCurrentPrice(initialHistory[initialHistory.length - 1]);
+
+    // Add some sample trades
+    const sampleTrades = [
+      {
+        price: initialHistory[50],
+        position: "buy",
+        amount: 60,
+        x: 50,
+        y: 0,
+      },
+      {
+        price: initialHistory[100],
+        position: "sell",
+        amount: 500,
+        x: 100,
+        y: 0,
+      },
+      {
+        price: initialHistory[170],
+        position: "buy",
+        amount: 100,
+        x: 170,
+        y: 0,
+      },
+      {
+        price: initialHistory[220],
+        position: "sell",
+        amount: 500,
+        x: 220,
+        y: 0,
+      },
+      {
+        price: initialHistory[270],
+        position: "buy",
+        amount: 315,
+        x: 270,
+        y: 0,
+      },
+    ];
+    setTrades(sampleTrades);
   }, []);
 
   // Simulate price movement
@@ -32,21 +84,22 @@ export default function MarketChart() {
     if (priceHistory.length === 0) return;
 
     const timer = setInterval(() => {
-      // Update price with zigzag movement
+      // Update price with zigzag movement (smaller movements for forex)
       setCurrentPrice((prev) => {
-        if (Math.random() < 0.2) {
+        if (Math.random() < 0.15) {
           setDirection(-direction);
         }
 
-        const volatility = 0.3 + Math.random() * 0.4;
+        // More realistic forex pip movements
+        const volatility = 0.00005 + Math.random() * 0.0001;
         const newPrice = prev + direction * volatility;
-        const boundedPrice = Math.max(90, Math.min(110, newPrice));
+        const boundedPrice = Math.max(1.0815, Math.min(1.0838, newPrice));
 
         // Update history
         setPriceHistory((oldHistory) => {
           const newHistory = [...oldHistory, boundedPrice];
-          if (newHistory.length > 50) {
-            return newHistory.slice(newHistory.length - 50);
+          if (newHistory.length > 300) {
+            return newHistory.slice(newHistory.length - 300);
           }
           return newHistory;
         });
@@ -88,128 +141,154 @@ export default function MarketChart() {
     ctx.clearRect(0, 0, width, height);
 
     // Find min/max for scaling
-    const minPrice = Math.min(...priceHistory, currentPrice) - 1;
-    const maxPrice = Math.max(...priceHistory, currentPrice) + 1;
+    const minPrice = Math.min(...priceHistory) - 0.0001;
+    const maxPrice = Math.max(...priceHistory) + 0.0001;
     const range = maxPrice - minPrice;
 
-    // Draw gradient background
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, "rgba(59, 130, 246, 0.08)");
-    gradient.addColorStop(1, "rgba(59, 130, 246, 0)");
-    ctx.fillStyle = gradient;
+    // Draw darker background
+    ctx.fillStyle = "#0a1222";
     ctx.fillRect(0, 0, width, height);
 
-    // Draw grid
+    // Draw grid lines
     ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
     ctx.lineWidth = 0.5;
 
-    // Horizontal grid lines
-    for (let i = 0; i <= 4; i++) {
-      const y = (height * i) / 4;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
-
     // Vertical grid lines
-    for (let i = 0; i <= 4; i++) {
-      const x = (width * i) / 4;
+    for (let i = 0; i <= 6; i++) {
+      const x = (width * i) / 6;
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, height);
       ctx.stroke();
     }
 
-    // Draw area under the line
-    ctx.fillStyle = "rgba(59, 130, 246, 0.15)";
-    ctx.beginPath();
-    ctx.moveTo(0, height);
-    const firstY = height - ((priceHistory[0] - minPrice) / range) * height;
-    ctx.lineTo(0, firstY);
-
-    // Draw history points
-    priceHistory.forEach((price, index) => {
-      const x = (width * index) / priceHistory.length;
+    // Draw price level lines with labels
+    const priceLines = 8;
+    for (let i = 0; i <= priceLines; i++) {
+      const price = minPrice + (range * i) / priceLines;
       const y = height - ((price - minPrice) / range) * height;
-      ctx.lineTo(x, y);
-    });
 
-    // Add current price point
-    const lastX = width;
-    const lastY = height - ((currentPrice - minPrice) / range) * height;
-    ctx.lineTo(lastX, lastY);
+      // Draw line
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
 
-    // Complete area
-    ctx.lineTo(width, height);
-    ctx.closePath();
-    ctx.fill();
+      // Draw price label
+      ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+      ctx.font = "10px Arial";
+      ctx.textAlign = "left";
+      ctx.fillText(price.toFixed(5), 5, y - 5);
+    }
+
+    // Draw current price horizontal line (highlighted)
+    const currentY = height - ((currentPrice - minPrice) / range) * height;
+    ctx.strokeStyle = "#3080ff";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 3]);
+    ctx.beginPath();
+    ctx.moveTo(0, currentY);
+    ctx.lineTo(width, currentY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw current price label
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 11px Arial";
+    ctx.textAlign = "left";
+    ctx.fillText(currentPrice.toFixed(5), 5, currentY - 5);
 
     // Draw price line
-    ctx.strokeStyle = "#3b82f6";
     ctx.lineWidth = 2;
     ctx.beginPath();
 
-    // Draw history
-    priceHistory.forEach((price, index) => {
-      const x = (width * index) / priceHistory.length;
-      const y = height - ((price - minPrice) / range) * height;
-
-      if (index === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    });
-
-    // Add current price point
-    ctx.lineTo(lastX, lastY);
-    ctx.stroke();
-
-    // Draw current price point
-    ctx.fillStyle =
-      currentPrice > priceHistory[priceHistory.length - 2]
-        ? "#10b981"
-        : "#ef4444";
-    ctx.beginPath();
-    ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Price markers at key points
-    for (let i = 0; i < priceHistory.length; i += 10) {
+    // Draw history with color based on price movement
+    for (let i = 0; i < priceHistory.length; i++) {
       const x = (width * i) / priceHistory.length;
       const y = height - ((priceHistory[i] - minPrice) / range) * height;
 
-      ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-      ctx.beginPath();
-      ctx.arc(x, y, 2, 0, Math.PI * 2);
-      ctx.fill();
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        // Determine line color based on price movement
+        if (priceHistory[i] >= priceHistory[i - 1]) {
+          ctx.strokeStyle = "#00c176"; // Green for up
+        } else {
+          ctx.strokeStyle = "#ff3747"; // Red for down
+        }
+
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+      }
     }
-  }, [priceHistory, currentPrice]);
+
+    // Remove the trades state update
+    const updatedTrades = trades.map((trade) => {
+      const y = height - ((trade.price - minPrice) / range) * height;
+      return { ...trade, y };
+    });
+
+    // Draw trades using updatedTrades directly
+    updatedTrades.forEach((trade) => {
+      const x = (width * trade.x) / priceHistory.length;
+      const y = trade.y;
+
+      // Draw trade icon
+      ctx.beginPath();
+      ctx.arc(x, y, 12, 0, Math.PI * 2);
+      ctx.fillStyle = trade.position === "buy" ? "#00c176" : "#ff3747";
+      ctx.fill();
+
+      // Draw currency symbol
+      ctx.fillStyle = "#fff";
+      ctx.font = "10px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("$", x, y);
+
+      // Draw amount
+      ctx.fillStyle = trade.position === "buy" ? "#00c176" : "#ff3747";
+      ctx.font = "10px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(`$${trade.amount}`, x, y - 18);
+    });
+
+    // Draw current price indicator
+    const lastX = width;
+    const lastY = height - ((currentPrice - minPrice) / range) * height;
+
+    // Determine color based on price movement
+    const priceChangeColor =
+      currentPrice > priceHistory[priceHistory.length - 2]
+        ? "#00c176" // Green for up
+        : "#ff3747"; // Red for down
+
+    // Draw current price point
+    ctx.fillStyle = priceChangeColor;
+    ctx.beginPath();
+    ctx.arc(lastX - 5, lastY, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }, [priceHistory, currentPrice, trades]);
 
   // Calculate price difference for display
   const priceDifference =
     priceHistory.length > 1
-      ? (currentPrice - priceHistory[priceHistory.length - 2]).toFixed(2)
-      : "0.00";
+      ? (currentPrice - priceHistory[0]).toFixed(5)
+      : "0.00000";
   const isPositive = parseFloat(priceDifference) >= 0;
 
   return (
-    <div className="bg-transparent border border-blue-500/20 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg h-full w-full">
+    <div className="bg-gray-900 border border-blue-900 rounded-xl overflow-hidden shadow-lg h-full w-full">
       {/* Header with asset info */}
-      <div className="flex justify-between items-center p-4 border-b border-blue-500/20">
+      <div className="flex justify-between items-center p-3 border-b border-blue-900 bg-gray-800">
         <div className="flex items-center">
-          <div className="w-8 h-8 bg-amber-500 rounded-md flex items-center justify-center mr-2">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path d="M3 9L12 4L21 9L12 14L3 9Z" fill="white" />
-              <path d="M3 14L12 19L21 14" stroke="white" strokeWidth="2" />
-            </svg>
+          <div className="flex items-center bg-gray-900 rounded-md p-1 mr-2">
+            <span className="text-white font-bold mr-1">🇪🇺</span>
+            <span className="text-white font-bold mr-1">/</span>
+            <span className="text-white font-bold">🇺🇸</span>
           </div>
           <div>
             <div className="font-medium text-white">EUR/USD</div>
@@ -222,35 +301,45 @@ export default function MarketChart() {
           </div>
         </div>
         <div className="text-xl font-bold text-white">
-          {currentPrice.toFixed(2)}
+          {currentPrice.toFixed(5)}
         </div>
       </div>
 
       {/* Chart */}
       <div
         ref={chartRef}
-        className="relative h-[300px] overflow-hidden bg-transparent"
+        className="relative h-[400px] overflow-hidden bg-gray-900"
       >
         {/* Canvas will be inserted here by useEffect */}
       </div>
 
+      {/* Trading controls - simplified for visual purposes */}
+      <div className="grid grid-cols-2 gap-2 p-3 border-t border-blue-900 bg-gray-800">
+        <button className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded">
+          BUY {currentPrice.toFixed(5)}
+        </button>
+        <button className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded">
+          SELL {currentPrice.toFixed(5)}
+        </button>
+      </div>
+
       {/* Stats footer */}
-      <div className="grid grid-cols-3 gap-2 p-4 border-t border-blue-500/20">
+      <div className="grid grid-cols-4 gap-2 p-3 border-t border-blue-900 bg-gray-900 text-xs">
         <div className="text-center">
-          <div className="text-xs text-blue-300">24h High</div>
-          <div className="font-medium text-white">
-            {(currentPrice + 5).toFixed(2)}
-          </div>
+          <div className="text-blue-300">SPREAD</div>
+          <div className="font-medium text-white">0.00012</div>
         </div>
         <div className="text-center">
-          <div className="text-xs text-blue-300">Volume</div>
-          <div className="font-medium text-white">$2.4M</div>
+          <div className="text-blue-300">PAYOUT</div>
+          <div className="font-medium text-white">82%</div>
         </div>
         <div className="text-center">
-          <div className="text-xs text-blue-300">24h Low</div>
-          <div className="font-medium text-white">
-            {(currentPrice - 8).toFixed(2)}
-          </div>
+          <div className="text-blue-300">EXPIRES</div>
+          <div className="font-medium text-white">5m</div>
+        </div>
+        <div className="text-center">
+          <div className="text-blue-300">INVESTMENT</div>
+          <div className="font-medium text-white">$100</div>
         </div>
       </div>
     </div>
