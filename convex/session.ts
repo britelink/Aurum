@@ -8,9 +8,35 @@ const BETTING_PERIOD = 30000; // 30 seconds for betting
 const PROCESSING_PERIOD = 30000; // 30 seconds for price movement
 const TOTAL_SESSION_DURATION = BETTING_PERIOD + PROCESSING_PERIOD;
 
-// Create a new session
+// Create a new session with cleanup for old sessions
 export const createSession = mutation({
   handler: async (ctx) => {
+    // First, get a count of all existing sessions
+    const sessions = await ctx.db
+      .query("sessions")
+      .order("desc") // Order by creation time (newest first)
+      .collect();
+
+    // If we have 25 or more sessions, delete the oldest 20
+    const MAX_SESSIONS = 25;
+    const KEEP_SESSIONS = 5;
+
+    if (sessions.length >= MAX_SESSIONS) {
+      // Keep the 5 newest sessions, delete the rest
+      const sessionsToKeep = sessions.slice(0, KEEP_SESSIONS);
+
+      // Create a set of IDs to keep for quick lookup
+      const idsToKeep = new Set(sessionsToKeep.map((session) => session._id));
+
+      // Delete all sessions except the ones we want to keep
+      for (const session of sessions) {
+        if (!idsToKeep.has(session._id)) {
+          await ctx.db.delete(session._id);
+        }
+      }
+    }
+
+    // Now create a new session as before
     const startTime = Date.now();
     const endTime = startTime + BETTING_PERIOD;
     const processingEndTime = endTime + PROCESSING_PERIOD;
