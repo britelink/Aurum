@@ -145,12 +145,51 @@ export default function MarketChart() {
     const maxPrice = Math.max(...priceHistory) + 0.0001;
     const range = maxPrice - minPrice;
 
-    // Draw darker background
-    ctx.fillStyle = "#0a1222";
+    // Draw background - more responsive to color mode
+    const isDarkMode = document.documentElement.classList.contains("dark");
+    ctx.fillStyle = isDarkMode ? "#0f172a" : "#f8fafc";
     ctx.fillRect(0, 0, width, height);
 
+    // Add gradient area under the chart
+    const areaGradient = ctx.createLinearGradient(0, 0, 0, height);
+    if (isDarkMode) {
+      areaGradient.addColorStop(0, "rgba(37, 99, 235, 0.2)");
+      areaGradient.addColorStop(1, "rgba(37, 99, 235, 0)");
+    } else {
+      areaGradient.addColorStop(0, "rgba(59, 130, 246, 0.1)");
+      areaGradient.addColorStop(1, "rgba(59, 130, 246, 0)");
+    }
+
+    // Draw the area under the price line
+    ctx.fillStyle = areaGradient;
+    ctx.beginPath();
+    ctx.moveTo(0, height); // Start at bottom left
+
+    // Draw to the first point
+    const firstY = height - ((priceHistory[0] - minPrice) / range) * height;
+    ctx.lineTo(0, firstY);
+
+    // Draw all points for the area
+    for (let i = 0; i < priceHistory.length; i++) {
+      const x = (width * i) / priceHistory.length;
+      const y = height - ((priceHistory[i] - minPrice) / range) * height;
+      ctx.lineTo(x, y);
+    }
+
+    // Complete the area
+    ctx.lineTo(
+      width,
+      height -
+        ((priceHistory[priceHistory.length - 1] - minPrice) / range) * height,
+    );
+    ctx.lineTo(width, height);
+    ctx.closePath();
+    ctx.fill();
+
     // Draw grid lines
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.strokeStyle = isDarkMode
+      ? "rgba(255, 255, 255, 0.1)"
+      : "rgba(0, 0, 0, 0.1)";
     ctx.lineWidth = 0.5;
 
     // Vertical grid lines
@@ -169,14 +208,15 @@ export default function MarketChart() {
       const y = height - ((price - minPrice) / range) * height;
 
       // Draw line
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
       ctx.stroke();
 
       // Draw price label
-      ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+      ctx.fillStyle = isDarkMode
+        ? "rgba(255, 255, 255, 0.5)"
+        : "rgba(0, 0, 0, 0.5)";
       ctx.font = "10px Arial";
       ctx.textAlign = "left";
       ctx.fillText(price.toFixed(5), 5, y - 5);
@@ -184,7 +224,7 @@ export default function MarketChart() {
 
     // Draw current price horizontal line (highlighted)
     const currentY = height - ((currentPrice - minPrice) / range) * height;
-    ctx.strokeStyle = "#3080ff";
+    ctx.strokeStyle = "#3b82f6"; // Blue that works in both modes
     ctx.lineWidth = 1;
     ctx.setLineDash([5, 3]);
     ctx.beginPath();
@@ -194,53 +234,57 @@ export default function MarketChart() {
     ctx.setLineDash([]);
 
     // Draw current price label
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = isDarkMode ? "#ffffff" : "#000000";
     ctx.font = "bold 11px Arial";
     ctx.textAlign = "left";
     ctx.fillText(currentPrice.toFixed(5), 5, currentY - 5);
 
-    // Draw price line
+    // Draw price line segments with color based on movement
     ctx.lineWidth = 2;
-    ctx.beginPath();
 
-    // Draw history with color based on price movement
-    for (let i = 0; i < priceHistory.length; i++) {
-      const x = (width * i) / priceHistory.length;
-      const y = height - ((priceHistory[i] - minPrice) / range) * height;
+    for (let i = 1; i < priceHistory.length; i++) {
+      const x0 = (width * (i - 1)) / priceHistory.length;
+      const y0 = height - ((priceHistory[i - 1] - minPrice) / range) * height;
+      const x1 = (width * i) / priceHistory.length;
+      const y1 = height - ((priceHistory[i] - minPrice) / range) * height;
 
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        // Determine line color based on price movement
-        if (priceHistory[i] >= priceHistory[i - 1]) {
-          ctx.strokeStyle = "#00c176"; // Green for up
-        } else {
-          ctx.strokeStyle = "#ff3747"; // Red for down
-        }
+      // Determine line color based on price movement
+      ctx.strokeStyle =
+        priceHistory[i] >= priceHistory[i - 1]
+          ? "#10b981" // Green for up (using Tailwind emerald-500)
+          : "#ef4444"; // Red for down (using Tailwind red-500)
 
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-      }
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
     }
 
-    // Remove the trades state update
+    // Draw trades
     const updatedTrades = trades.map((trade) => {
       const y = height - ((trade.price - minPrice) / range) * height;
       return { ...trade, y };
     });
 
-    // Draw trades using updatedTrades directly
     updatedTrades.forEach((trade) => {
       const x = (width * trade.x) / priceHistory.length;
       const y = trade.y;
 
-      // Draw trade icon
+      // Draw trade icon with better styling
       ctx.beginPath();
       ctx.arc(x, y, 12, 0, Math.PI * 2);
-      ctx.fillStyle = trade.position === "buy" ? "#00c176" : "#ff3747";
+      ctx.fillStyle =
+        trade.position === "buy"
+          ? "rgba(16, 185, 129, 0.9)" // More modern green
+          : "rgba(239, 68, 68, 0.9)"; // More modern red
       ctx.fill();
+
+      // Add subtle border
+      ctx.strokeStyle = isDarkMode
+        ? "rgba(255, 255, 255, 0.2)"
+        : "rgba(0, 0, 0, 0.1)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
 
       // Draw currency symbol
       ctx.fillStyle = "#fff";
@@ -249,9 +293,9 @@ export default function MarketChart() {
       ctx.textBaseline = "middle";
       ctx.fillText("$", x, y);
 
-      // Draw amount
-      ctx.fillStyle = trade.position === "buy" ? "#00c176" : "#ff3747";
-      ctx.font = "10px Arial";
+      // Draw amount with improved style
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 10px Arial";
       ctx.textAlign = "center";
       ctx.fillText(`$${trade.amount}`, x, y - 18);
     });
@@ -263,14 +307,19 @@ export default function MarketChart() {
     // Determine color based on price movement
     const priceChangeColor =
       currentPrice > priceHistory[priceHistory.length - 2]
-        ? "#00c176" // Green for up
-        : "#ff3747"; // Red for down
+        ? "#10b981" // More modern green
+        : "#ef4444"; // More modern red
 
-    // Draw current price point
+    // Draw current price point with shadow effect
+    ctx.shadowColor = priceChangeColor;
+    ctx.shadowBlur = 8;
     ctx.fillStyle = priceChangeColor;
     ctx.beginPath();
-    ctx.arc(lastX - 5, lastY, 5, 0, Math.PI * 2);
+    ctx.arc(lastX - 5, lastY, 6, 0, Math.PI * 2);
     ctx.fill();
+
+    // Reset shadow
+    ctx.shadowBlur = 0;
   }, [priceHistory, currentPrice, trades]);
 
   // Calculate price difference for display
@@ -281,26 +330,32 @@ export default function MarketChart() {
   const isPositive = parseFloat(priceDifference) >= 0;
 
   return (
-    <div className="bg-gray-900 border border-blue-900 rounded-xl overflow-hidden shadow-lg h-full w-full">
+    <div className="bg-white dark:bg-gray-900 border border-slate-200 dark:border-blue-900 rounded-xl overflow-hidden shadow-lg h-full w-full">
       {/* Header with asset info */}
-      <div className="flex justify-between items-center p-3 border-b border-blue-900 bg-gray-800">
+      <div className="flex justify-between items-center p-3 border-b border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-800">
         <div className="flex items-center">
-          <div className="flex items-center bg-gray-900 rounded-md p-1 mr-2">
-            <span className="text-white font-bold mr-1">🇪🇺</span>
-            <span className="text-white font-bold mr-1">/</span>
-            <span className="text-white font-bold">🇺🇸</span>
+          <div className="flex items-center bg-slate-100 dark:bg-gray-900 rounded-md p-1 mr-2">
+            <span className="text-slate-800 dark:text-white font-bold mr-1">
+              🇪🇺
+            </span>
+            <span className="text-slate-800 dark:text-white font-bold mr-1">
+              /
+            </span>
+            <span className="text-slate-800 dark:text-white font-bold">🇺🇸</span>
           </div>
           <div>
-            <div className="font-medium text-white">EUR/USD</div>
+            <div className="font-medium text-slate-800 dark:text-white">
+              EUR/USD
+            </div>
             <div
-              className={`text-xs font-medium ${isPositive ? "text-emerald-400" : "text-red-400"}`}
+              className={`text-xs font-medium ${isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
             >
               {isPositive ? "+" : ""}
               {priceDifference}
             </div>
           </div>
         </div>
-        <div className="text-xl font-bold text-white">
+        <div className="text-xl font-bold text-slate-800 dark:text-white">
           {currentPrice.toFixed(5)}
         </div>
       </div>
@@ -308,14 +363,14 @@ export default function MarketChart() {
       {/* Chart */}
       <div
         ref={chartRef}
-        className="relative h-[400px] overflow-hidden bg-gray-900"
+        className="relative h-[400px] overflow-hidden bg-slate-50 dark:bg-gray-900"
       >
         {/* Canvas will be inserted here by useEffect */}
       </div>
 
       {/* Trading controls - simplified for visual purposes */}
-      <div className="grid grid-cols-2 gap-2 p-3 border-t border-blue-900 bg-gray-800">
-        <button className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded">
+      <div className="grid grid-cols-2 gap-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-800">
+        <button className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded">
           BUY {currentPrice.toFixed(5)}
         </button>
         <button className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded">
@@ -324,22 +379,24 @@ export default function MarketChart() {
       </div>
 
       {/* Stats footer */}
-      <div className="grid grid-cols-4 gap-2 p-3 border-t border-blue-900 bg-gray-900 text-xs">
+      <div className="grid grid-cols-4 gap-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-900 text-xs">
         <div className="text-center">
-          <div className="text-blue-300">SPREAD</div>
-          <div className="font-medium text-white">0.00012</div>
+          <div className="text-blue-500 dark:text-blue-300">SPREAD</div>
+          <div className="font-medium text-slate-800 dark:text-white">
+            0.00012
+          </div>
         </div>
         <div className="text-center">
-          <div className="text-blue-300">PAYOUT</div>
-          <div className="font-medium text-white">82%</div>
+          <div className="text-blue-500 dark:text-blue-300">PAYOUT</div>
+          <div className="font-medium text-slate-800 dark:text-white">82%</div>
         </div>
         <div className="text-center">
-          <div className="text-blue-300">EXPIRES</div>
-          <div className="font-medium text-white">5m</div>
+          <div className="text-blue-500 dark:text-blue-300">EXPIRES</div>
+          <div className="font-medium text-slate-800 dark:text-white">5m</div>
         </div>
         <div className="text-center">
-          <div className="text-blue-300">INVESTMENT</div>
-          <div className="font-medium text-white">$100</div>
+          <div className="text-blue-500 dark:text-blue-300">INVESTMENT</div>
+          <div className="font-medium text-slate-800 dark:text-white">$100</div>
         </div>
       </div>
     </div>

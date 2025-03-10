@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Menu, User, Wallet, Trophy, LogOut } from "lucide-react";
+import { Menu, Wallet, Trophy, LogOut } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
