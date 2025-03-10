@@ -5,6 +5,32 @@ import TradingChart from "../components/TradingChart";
 export default function TradingDemoPage() {
   const [showTutorial, setShowTutorial] = useState(true);
   const [onlineUsers] = useState(Math.floor(7000 + Math.random() * 500));
+  const [tradeHistory, setTradeHistory] = useState<
+    {
+      id: number;
+      position: string;
+      amount: number;
+      entryPrice: number;
+      exitPrice?: number;
+      profit: number;
+      time: string;
+      isWin?: boolean;
+    }[]
+  >([]);
+
+  // Function to receive trade history updates from the TradingChart component
+  const onTradeComplete = (tradeData: {
+    id: number;
+    position: string;
+    amount: number;
+    entryPrice: number;
+    exitPrice?: number;
+    profit: number;
+    time: string;
+    isWin?: boolean;
+  }) => {
+    setTradeHistory((prev) => [tradeData, ...prev].slice(0, 10)); // Keep only the 10 most recent trades
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-gray-950">
@@ -94,7 +120,7 @@ export default function TradingDemoPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main chart area */}
           <div className="lg:col-span-2">
-            <TradingChart />
+            <TradingChart onTradeComplete={onTradeComplete} />
           </div>
 
           {/* Sidebar */}
@@ -148,25 +174,75 @@ export default function TradingDemoPage() {
                 </h2>
               </div>
               <div className="p-3">
-                <div className="text-center py-8 text-slate-500 dark:text-slate-400 text-sm">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-10 w-10 mx-auto mb-2 text-slate-300 dark:text-slate-600"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
-                    <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
-                    <path d="M18 12h-2" />
-                    <path d="M15 9l3 3-3 3" />
-                  </svg>
-                  <p>Your trade history will appear here</p>
-                  <p>Place your first trade to get started</p>
-                </div>
+                {tradeHistory.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 dark:text-slate-400 text-sm">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-10 w-10 mx-auto mb-2 text-slate-300 dark:text-slate-600"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+                      <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+                      <path d="M18 12h-2" />
+                      <path d="M15 9l3 3-3 3" />
+                    </svg>
+                    <p>Your trade history will appear here</p>
+                    <p>Place your first trade to get started</p>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2 mb-2">
+                      <span>Position</span>
+                      <span>Amount</span>
+                      <span>Result</span>
+                    </div>
+                    {tradeHistory.slice(0, 4).map((trade) => (
+                      <div
+                        key={trade.id}
+                        className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800 last:border-0"
+                      >
+                        <div className="flex items-center">
+                          <span
+                            className={`inline-block w-2 h-2 rounded-full mr-2 ${
+                              trade.position === "buy"
+                                ? "bg-green-500"
+                                : "bg-red-500"
+                            }`}
+                          ></span>
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                            {trade.position === "buy" ? "BUY" : "SELL"}
+                          </span>
+                        </div>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                          ${trade.amount}
+                        </span>
+                        <div className="text-right">
+                          <span
+                            className={`text-sm font-medium ${
+                              trade.isWin ? "text-green-500" : "text-red-500"
+                            }`}
+                          >
+                            {trade.isWin ? "+" : ""}$
+                            {Math.abs(trade.profit).toFixed(2)}
+                          </span>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            {trade.time}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="mt-2 text-right">
+                      <button className="text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400">
+                        View all trades
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

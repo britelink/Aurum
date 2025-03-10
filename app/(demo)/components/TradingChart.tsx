@@ -1,7 +1,28 @@
 "use client";
 import React, { useEffect, useState, useRef } from "react";
+import {
+  calculateSessionResults,
+  BetPosition,
+  BetAmount,
+  Player,
+  SessionResult,
+  generateSimulatedSession,
+} from "../utils/aurumDemo";
 
-export default function TradingChart() {
+interface TradingChartProps {
+  onTradeComplete?: (tradeData: {
+    id: number;
+    position: string;
+    amount: number;
+    entryPrice: number;
+    exitPrice?: number;
+    profit: number;
+    time: string;
+    isWin?: boolean;
+  }) => void;
+}
+
+export default function TradingChart({ onTradeComplete }: TradingChartProps) {
   // State from MarketChart
   const [currentPrice, setCurrentPrice] = useState(1.0825);
   const [priceHistory, setPriceHistory] = useState<number[]>([]);
@@ -10,7 +31,16 @@ export default function TradingChart() {
 
   // State from PriceSimulator
   const [balance, setBalance] = useState(1000);
-  const [investmentAmount, setInvestmentAmount] = useState(100);
+  const [betAmount, setBetAmount] = useState<BetAmount>(1);
+  const [sessionPlayers, setSessionPlayers] = useState<Player[]>([]);
+  const [sessionResult, setSessionResult] = useState<SessionResult | null>(
+    null,
+  );
+  const [userPlayerId, setUserPlayerId] = useState(
+    `user-${Math.random().toString(36).substring(2, 9)}`,
+  );
+  const [sessionEnding, setSessionEnding] = useState(false);
+  const [sessionTime, setSessionTime] = useState(30); // seconds for demo
   const [countDown, setCountDown] = useState(30);
   const [isTrading, setIsTrading] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<
@@ -47,6 +77,11 @@ export default function TradingChart() {
     index: number;
     time: string;
   } | null>(null);
+
+  // Add this new state to track trade path points
+  const [tradePath, setTradePath] = useState<
+    { x: number; y: number; price: number; time: number }[]
+  >([]);
 
   // Generate initial price history (5 minute simulation with more data points)
   useEffect(() => {
@@ -96,12 +131,25 @@ export default function TradingChart() {
           return newHistory;
         });
 
+        // If in active trading session, update trade path
+        if (isTrading && activeTrade) {
+          setTradePath((prevPath) => [
+            ...prevPath,
+            {
+              x: chartRef.current ? chartRef.current.clientWidth : 0,
+              y: 0, // Will be calculated in draw function
+              price: boundedPrice,
+              time: Date.now(),
+            },
+          ]);
+        }
+
         return boundedPrice;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [direction, priceHistory]);
+  }, [direction, priceHistory, isTrading, activeTrade]);
 
   // Timer countdown for active trades
   useEffect(() => {
@@ -158,7 +206,7 @@ export default function TradingChart() {
     setHoverInfo(null);
   };
 
-  // Draw the chart with hover indicators
+  // Draw the chart with hover indicators and color-coded line segments
   useEffect(() => {
     if (!chartRef.current || priceHistory.length === 0) return;
 
@@ -228,19 +276,65 @@ export default function TradingChart() {
     ctx.closePath();
     ctx.fill();
 
-    // Draw the price line
-    ctx.beginPath();
-    ctx.moveTo(0, firstY);
+    // Draw the price line with color segments
+    ctx.lineWidth = 2;
 
-    for (let i = 0; i < priceHistory.length; i++) {
+    // Draw each segment with appropriate color
+    for (let i = 1; i < priceHistory.length; i++) {
+      const prevX = (width * (i - 1)) / priceHistory.length;
+      const prevY =
+        height - ((priceHistory[i - 1] - minPrice) / range) * height;
       const x = (width * i) / priceHistory.length;
       const y = height - ((priceHistory[i] - minPrice) / range) * height;
+
+      // Determine color based on price movement
+      const priceIsRising = priceHistory[i] >= priceHistory[i - 1];
+      ctx.strokeStyle = priceIsRising
+        ? isDarkMode
+          ? "#10b981"
+          : "#059669" // Green for price increase
+        : isDarkMode
+          ? "#ef4444"
+          : "#dc2626"; // Red for price decrease
+
+      ctx.beginPath();
+      ctx.moveTo(prevX, prevY);
       ctx.lineTo(x, y);
+      ctx.stroke();
     }
 
-    ctx.strokeStyle = isDarkMode ? "#3b82f6" : "#2563eb"; // Blue line
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    // Draw grid lines
+    ctx.strokeStyle = isDarkMode
+      ? "rgba(255, 255, 255, 0.05)"
+      : "rgba(0, 0, 0, 0.05)";
+    ctx.lineWidth = 1;
+
+    // Horizontal grid lines (5 evenly spaced)
+    for (let i = 0; i < 5; i++) {
+      const y = height * (i / 4);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+
+      // Price labels on the left
+      const labelPrice = maxPrice - (i / 4) * range;
+      ctx.fillStyle = isDarkMode
+        ? "rgba(255, 255, 255, 0.5)"
+        : "rgba(0, 0, 0, 0.5)";
+      ctx.font = "10px Arial";
+      ctx.textAlign = "left";
+      ctx.fillText(labelPrice.toFixed(5), 5, y - 5);
+    }
+
+    // Vertical grid lines (5 evenly spaced)
+    for (let i = 0; i < 5; i++) {
+      const x = width * (i / 4);
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
 
     // Draw active trade position if exists
     if (activeTrade) {
@@ -314,39 +408,6 @@ export default function TradingChart() {
       ctx.setLineDash([]);
     }
 
-    // Draw grid lines
-    ctx.strokeStyle = isDarkMode
-      ? "rgba(255, 255, 255, 0.05)"
-      : "rgba(0, 0, 0, 0.05)";
-    ctx.lineWidth = 1;
-
-    // Horizontal grid lines (5 evenly spaced)
-    for (let i = 0; i < 5; i++) {
-      const y = height * (i / 4);
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-
-      // Price labels on the left
-      const labelPrice = maxPrice - (i / 4) * range;
-      ctx.fillStyle = isDarkMode
-        ? "rgba(255, 255, 255, 0.5)"
-        : "rgba(0, 0, 0, 0.5)";
-      ctx.font = "10px Arial";
-      ctx.textAlign = "left";
-      ctx.fillText(labelPrice.toFixed(5), 5, y - 5);
-    }
-
-    // Vertical grid lines (5 evenly spaced)
-    for (let i = 0; i < 5; i++) {
-      const x = width * (i / 4);
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
-
     // Draw current price indicator
     const lastX = width;
     const lastY = height - ((currentPrice - minPrice) / range) * height;
@@ -367,16 +428,246 @@ export default function TradingChart() {
 
     // Reset shadow
     ctx.shadowBlur = 0;
-  }, [priceHistory, currentPrice, activeTrade, hoverInfo]);
+
+    // Draw the trade path if in active trading session
+    if (isTrading && activeTrade && tradePath.length > 0) {
+      // Calculate y positions for all points in trade path
+      const updatedTradePath = tradePath.map((point) => ({
+        ...point,
+        y: height - ((point.price - minPrice) / range) * height,
+      }));
+
+      // Draw path highlight - a semi-transparent area along the price path
+      ctx.beginPath();
+      ctx.moveTo(updatedTradePath[0].x, updatedTradePath[0].y);
+
+      // Create path from entry point to current position
+      for (let i = 1; i < updatedTradePath.length; i++) {
+        // For x position, calculate based on time progress in session
+        const timeProgress =
+          (updatedTradePath[i].time - activeTrade.startTime) /
+          (sessionTime * 1000);
+        const x = width - (1 - timeProgress) * width;
+
+        ctx.lineTo(x, updatedTradePath[i].y);
+      }
+
+      // Close the path to bottom for area fill
+      ctx.lineTo(width, height);
+      ctx.lineTo(updatedTradePath[0].x, height);
+      ctx.closePath();
+
+      // Use position-appropriate colors
+      const pathColor =
+        activeTrade.position === "buy"
+          ? "rgba(16, 185, 129, 0.15)" // Green for buy
+          : "rgba(239, 68, 68, 0.15)"; // Red for sell
+
+      ctx.fillStyle = pathColor;
+      ctx.fill();
+
+      // Draw the path line itself
+      ctx.beginPath();
+      ctx.moveTo(updatedTradePath[0].x, updatedTradePath[0].y);
+
+      for (let i = 1; i < updatedTradePath.length; i++) {
+        const timeProgress =
+          (updatedTradePath[i].time - activeTrade.startTime) /
+          (sessionTime * 1000);
+        const x = width - (1 - timeProgress) * width;
+
+        ctx.lineTo(x, updatedTradePath[i].y);
+      }
+
+      ctx.strokeStyle =
+        activeTrade.position === "buy"
+          ? "rgba(16, 185, 129, 0.8)" // Green for buy
+          : "rgba(239, 68, 68, 0.8)"; // Red for sell
+
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Draw entry point marker
+      ctx.beginPath();
+      ctx.arc(updatedTradePath[0].x, updatedTradePath[0].y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = activeTrade.position === "buy" ? "#10b981" : "#ef4444";
+      ctx.fill();
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Add entry label
+      ctx.font = "bold 11px Arial";
+      ctx.fillStyle = activeTrade.position === "buy" ? "#10b981" : "#ef4444";
+      ctx.textAlign = "left";
+      const labelY =
+        updatedTradePath[0].y > height - 40
+          ? updatedTradePath[0].y - 25
+          : updatedTradePath[0].y + 25;
+
+      ctx.fillText(
+        `ENTRY: ${activeTrade.entryPrice.toFixed(5)}`,
+        updatedTradePath[0].x + 10,
+        labelY,
+      );
+
+      // Add "Target" label at the right edge
+      const lastPoint = updatedTradePath[updatedTradePath.length - 1];
+      ctx.fillText(
+        `CURRENT: ${lastPoint.price.toFixed(5)}`,
+        width - 150,
+        lastPoint.y - 10,
+      );
+
+      // Draw "Session Progress" indicator at the bottom of chart
+      const sessionProgress = Math.min(
+        (Date.now() - activeTrade.startTime) / (sessionTime * 1000),
+        1,
+      );
+      ctx.fillStyle = isDarkMode ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)";
+      ctx.fillRect(0, height - 5, width, 5);
+      ctx.fillStyle = activeTrade.position === "buy" ? "#10b981" : "#ef4444";
+      ctx.fillRect(0, height - 5, width * sessionProgress, 5);
+    }
+  }, [
+    priceHistory,
+    currentPrice,
+    activeTrade,
+    tradePath,
+    hoverInfo,
+    isTrading,
+    sessionTime,
+  ]);
+
+  // Initialize with some random players
+  useEffect(() => {
+    // Simulate 15-25 other players for the session
+    const randomPlayerCount = Math.floor(Math.random() * 10) + 15;
+    const simulatedPlayers = generateSimulatedSession(randomPlayerCount);
+    setSessionPlayers(simulatedPlayers);
+  }, []);
+
+  // Function to place a bet
+  const placeBet = (position: BetPosition) => {
+    if (balance < betAmount) return;
+
+    // Remove any existing bets by this player
+    const filteredPlayers = sessionPlayers.filter((p) => p.id !== userPlayerId);
+
+    // Add the new bet
+    const userBet: Player = {
+      id: userPlayerId,
+      position,
+      amount: betAmount,
+    };
+
+    setSessionPlayers([...filteredPlayers, userBet]);
+    setBalance((prev) => prev - betAmount);
+    setIsTrading(true);
+
+    // Initialize trade path with entry point
+    const entryPrice = currentPrice;
+    const newActiveTrade = {
+      id: Date.now(),
+      position,
+      amount: betAmount,
+      entryPrice,
+      startTime: Date.now(),
+      x: chartRef.current ? chartRef.current.clientWidth : 0,
+      y: 0, // Will be calculated in the draw function
+    };
+
+    setActiveTrade(newActiveTrade);
+    setTradePath([
+      {
+        x: chartRef.current ? chartRef.current.clientWidth : 0,
+        y: 0,
+        price: entryPrice,
+        time: Date.now(),
+      },
+    ]);
+
+    // Start countdown to session end
+    startSessionCountdown();
+  };
+
+  // Function to start countdown timer
+  const startSessionCountdown = () => {
+    setCountDown(sessionTime);
+    const timer = setInterval(() => {
+      setCountDown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          endSession();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  // Function to end a trading session
+  const endSession = () => {
+    setSessionEnding(true);
+
+    // Determine the winner based on price movement
+    const startPrice = tradePath[0]?.price || currentPrice;
+    const endPrice = currentPrice;
+    const priceWentUp = endPrice > startPrice;
+    const winningPosition: BetPosition = priceWentUp ? "buy" : "sell";
+
+    // Calculate session results
+    const result = calculateSessionResults(sessionPlayers, winningPosition);
+    setSessionResult(result);
+
+    // Find the user's result
+    const userResult = [...result.winners, ...result.losers].find(
+      (player) => player.playerId === userPlayerId,
+    );
+
+    if (userResult) {
+      // Update user's balance
+      setBalance((prev) => prev + userResult.totalReturn);
+
+      // Create trade history entry
+      const tradeData = {
+        id: Date.now(),
+        position: activeTrade?.position || "unknown",
+        amount: activeTrade?.amount || 0,
+        entryPrice: activeTrade?.entryPrice || 0,
+        exitPrice: currentPrice,
+        profit: userResult.profit,
+        time: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        isWin: userResult.profit > 0,
+      };
+
+      // Update local trade history
+      setTradeHistory((prev) => [tradeData, ...prev]);
+
+      // Notify parent component
+      if (onTradeComplete) {
+        onTradeComplete(tradeData);
+      }
+    }
+
+    // Reset for next session
+    setActiveTrade(null);
+    setTradePath([]);
+    setCountDown(0);
+    setSessionPlayers([]);
+  };
 
   // Start a new trade
   const startTrade = (position: "buy" | "sell") => {
-    if (isTrading || investmentAmount > balance) return;
+    if (isTrading || betAmount > balance) return;
 
     const newTrade = {
       id: Date.now(),
       position: position,
-      amount: investmentAmount,
+      amount: betAmount,
       entryPrice: currentPrice,
       startTime: Date.now(),
       x: priceHistory.length - 1,
@@ -386,7 +677,7 @@ export default function TradingChart() {
     setActiveTrade(newTrade);
     setSelectedPosition(position);
     setIsTrading(true);
-    setBalance((prev) => prev - investmentAmount);
+    setBalance((prev) => prev - betAmount);
   };
 
   // Complete an active trade
@@ -493,8 +784,8 @@ export default function TradingChart() {
               }`}
             >
               {result === "win"
-                ? `+$${Math.floor(investmentAmount * 0.82)}`
-                : `-$${investmentAmount}`}
+                ? `+$${Math.floor(betAmount * 0.82)}`
+                : `-$${betAmount}`}
             </div>
           )}
           <div className="text-lg font-bold text-slate-800 dark:text-white">
@@ -602,48 +893,97 @@ export default function TradingChart() {
             </div>
           </div>
         )}
+
+        {/* Session info overlay */}
+        <div className="absolute top-4 left-4 bg-slate-800/90 text-white px-3 py-2 rounded text-xs">
+          <div className="font-bold mb-1">Current Session</div>
+          <div>
+            Buy: $
+            {sessionPlayers
+              .filter((p) => p.position === "buy")
+              .reduce((sum, p) => sum + p.amount, 0)}
+          </div>
+          <div>
+            Sell: $
+            {sessionPlayers
+              .filter((p) => p.position === "sell")
+              .reduce((sum, p) => sum + p.amount, 0)}
+          </div>
+          <div>Players: {sessionPlayers.length}</div>
+          {isTrading && <div className="mt-1">Ends in: {countDown}s</div>}
+        </div>
+
+        {/* Session result overlay */}
+        {sessionResult && (
+          <div className="absolute inset-0 bg-slate-900/80 flex items-center justify-center">
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-lg max-w-xs text-center">
+              <div className="text-xl font-bold mb-2">
+                {sessionResult.isFoul
+                  ? "No Winners"
+                  : sessionResult.isNeutral
+                    ? "Draw"
+                    : `${sessionResult.winningPosition?.toUpperCase()} Wins!`}
+              </div>
+              {!sessionResult.isFoul && !sessionResult.isNeutral && (
+                <div className="mb-3">
+                  <div className="text-sm text-slate-600 dark:text-slate-400">
+                    {sessionResult.winningPosition === "buy"
+                      ? "Price went UP"
+                      : "Price went DOWN"}
+                  </div>
+                  <div className="mt-2 flex justify-center space-x-4">
+                    <div className="text-center">
+                      <div className="text-xs text-slate-500">$1 Bettors</div>
+                      <div className="font-medium">
+                        $
+                        {sessionResult.winners
+                          .find((w) => w.initialBet === 1)
+                          ?.totalReturn.toFixed(2) || "0.00"}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-slate-500">$2 Bettors</div>
+                      <div className="font-medium">
+                        $
+                        {sessionResult.winners
+                          .find((w) => w.initialBet === 2)
+                          ?.totalReturn.toFixed(2) || "0.00"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="text-sm mb-1">
+                {sessionResult.isFoul
+                  ? "All bets were on the same side - no money lost"
+                  : sessionResult.isNeutral
+                    ? "Buy and Sell were exactly equal - continuing to next round"
+                    : "Results calculated with 8% platform fee"}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Investment amount selection */}
-      <div className="grid grid-cols-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-800">
+      {/* Investment amount selection - Update to only allow $1 and $2 */}
+      <div className="p-3 border-t border-slate-200 dark:border-blue-900">
         <div>
           <label className="text-sm text-slate-600 dark:text-slate-400 mb-2 block">
-            Investment Amount
+            Bet Amount
           </label>
           <div className="flex space-x-2">
-            {[50, 100, 250, 500].map((amount) => (
+            {[1, 2].map((amount) => (
               <button
                 key={amount}
-                onClick={() => setInvestmentAmount(amount)}
+                onClick={() => setBetAmount(amount as BetAmount)}
                 className={`px-3 py-1 rounded text-sm ${
-                  investmentAmount === amount
-                    ? "bg-blue-600 text-white dark:bg-blue-700"
-                    : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
-                } ${amount > balance ? "opacity-50 cursor-not-allowed" : ""}`}
-                disabled={amount > balance || isTrading}
-              >
-                ${amount}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label className="text-sm text-slate-600 dark:text-slate-400 mb-2 block">
-            Expiration Time
-          </label>
-          <div className="flex space-x-2">
-            {[30, 60, 120, 300].map((seconds) => (
-              <button
-                key={seconds}
-                onClick={() => setCountDown(seconds)}
-                className={`px-3 py-1 rounded text-sm ${
-                  countDown === seconds
+                  betAmount === amount
                     ? "bg-blue-600 text-white dark:bg-blue-700"
                     : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
                 } ${isTrading ? "opacity-50 cursor-not-allowed" : ""}`}
                 disabled={isTrading}
               >
-                {seconds < 60 ? `${seconds}s` : `${seconds / 60}m`}
+                ${amount}
               </button>
             ))}
           </div>
@@ -654,42 +994,42 @@ export default function TradingChart() {
       <div className="grid grid-cols-2 gap-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-800">
         <button
           className={`bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded ${isTrading ? "opacity-50 cursor-not-allowed" : ""}`}
-          onClick={() => startTrade("buy")}
-          disabled={isTrading || balance < investmentAmount}
+          onClick={() => placeBet("buy")}
+          disabled={isTrading || balance < betAmount}
         >
-          BUY {currentPrice.toFixed(5)}
+          BUY (UP)
         </button>
         <button
           className={`bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded ${isTrading ? "opacity-50 cursor-not-allowed" : ""}`}
-          onClick={() => startTrade("sell")}
-          disabled={isTrading || balance < investmentAmount}
+          onClick={() => placeBet("sell")}
+          disabled={isTrading || balance < betAmount}
         >
-          SELL {currentPrice.toFixed(5)}
+          SELL (DOWN)
         </button>
       </div>
 
       {/* Stats footer */}
       <div className="grid grid-cols-4 gap-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-900 text-xs">
         <div className="text-center">
-          <div className="text-blue-500 dark:text-blue-300">SPREAD</div>
+          <div className="text-blue-500 dark:text-blue-300">SESSION</div>
           <div className="font-medium text-slate-800 dark:text-white">
-            0.00012
+            {isTrading ? `${countDown}s` : "Ready"}
           </div>
         </div>
         <div className="text-center">
           <div className="text-blue-500 dark:text-blue-300">PAYOUT</div>
-          <div className="font-medium text-slate-800 dark:text-white">82%</div>
-        </div>
-        <div className="text-center">
-          <div className="text-blue-500 dark:text-blue-300">EXPIRES</div>
           <div className="font-medium text-slate-800 dark:text-white">
-            {countDown < 60 ? `${countDown}s` : `${countDown / 60}m`}
+            100%+
           </div>
         </div>
         <div className="text-center">
-          <div className="text-blue-500 dark:text-blue-300">INVESTMENT</div>
+          <div className="text-blue-500 dark:text-blue-300">FEE</div>
+          <div className="font-medium text-slate-800 dark:text-white">8%</div>
+        </div>
+        <div className="text-center">
+          <div className="text-blue-500 dark:text-blue-300">MY BET</div>
           <div className="font-medium text-slate-800 dark:text-white">
-            ${investmentAmount}
+            ${betAmount}
           </div>
         </div>
       </div>
