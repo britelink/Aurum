@@ -97,8 +97,8 @@ export default function TradingDemoPage() {
               Welcome to the Trading Simulator
             </h2>
             <p className="text-slate-700 dark:text-slate-300 mb-3">
-              This is a risk-free environment to practice trading. Here's how it
-              works:
+              This is a risk-free environment to practice trading. Here&apos;s
+              how it works:
             </p>
             <ol className="list-decimal pl-5 text-slate-600 dark:text-slate-400 space-y-1">
               <li>Select your investment amount and expiration time</li>
@@ -266,7 +266,7 @@ export default function TradingDemoPage() {
                 </p>
                 <p>
                   <span className="text-amber-500 dark:text-amber-400">⚡</span>
-                  Don't chase losses with larger investments.
+                  Don&apos;t chase losses with larger investments.
                 </p>
                 <p>
                   <span className="text-purple-500 dark:text-purple-400">

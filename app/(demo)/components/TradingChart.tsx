@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable no-unused-vars */
 import React, { useEffect, useState, useRef } from "react";
 import {
   calculateSessionResults,
@@ -661,24 +662,6 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
   };
 
   // Start a new trade
-  const startTrade = (position: "buy" | "sell") => {
-    if (isTrading || betAmount > balance) return;
-
-    const newTrade = {
-      id: Date.now(),
-      position: position,
-      amount: betAmount,
-      entryPrice: currentPrice,
-      startTime: Date.now(),
-      x: priceHistory.length - 1,
-      y: 0,
-    };
-
-    setActiveTrade(newTrade);
-    setSelectedPosition(position);
-    setIsTrading(true);
-    setBalance((prev) => prev - betAmount);
-  };
 
   // Complete an active trade
   const completeTrade = () => {
