@@ -673,6 +673,11 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
       isWin,
     };
 
+    // Call the callback to notify parent component
+    if (onTradeComplete) {
+      onTradeComplete(completedTrade);
+    }
+
     setResult(isWin ? "win" : "lose");
     setActiveTrade(null);
     setIsTrading(false);
