@@ -38,29 +38,13 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
   const [sessionResult, setSessionResult] = useState<SessionResult | null>(
     null,
   );
-  const [userPlayerId, setUserPlayerId] = useState(
+  const [userPlayerId] = useState(
     `user-${Math.random().toString(36).substring(2, 9)}`,
   );
-  const [sessionEnding, setSessionEnding] = useState(false);
-  const [sessionTime, setSessionTime] = useState(30); // seconds for demo
+  const [sessionTime] = useState(30); // seconds for demo
   const [countDown, setCountDown] = useState(30);
   const [isTrading, setIsTrading] = useState(false);
-  const [selectedPosition, setSelectedPosition] = useState<
-    "buy" | "sell" | null
-  >(null);
   const [result, setResult] = useState<"win" | "lose" | null>(null);
-  const [tradeHistory, setTradeHistory] = useState<
-    {
-      id: number;
-      position: string;
-      amount: number;
-      entryPrice: number;
-      exitPrice?: number;
-      profit: number;
-      time: string;
-      isWin?: boolean;
-    }[]
-  >([]);
   const [activeTrade, setActiveTrade] = useState<{
     id: number;
     position: string;
@@ -610,7 +594,7 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
 
   // Function to end a trading session
   const endSession = () => {
-    setSessionEnding(true);
+    setIsTrading(false);
 
     // Determine the winner based on price movement
     const startPrice = tradePath[0]?.price || currentPrice;
@@ -646,9 +630,6 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
         isWin: userResult.profit > 0,
       };
 
-      // Update local trade history
-      setTradeHistory((prev) => [tradeData, ...prev]);
-
       // Notify parent component
       if (onTradeComplete) {
         onTradeComplete(tradeData);
@@ -661,8 +642,6 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
     setCountDown(0);
     setSessionPlayers([]);
   };
-
-  // Start a new trade
 
   // Complete an active trade
   const completeTrade = () => {
@@ -694,7 +673,6 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
       isWin,
     };
 
-    setTradeHistory((prev) => [completedTrade, ...prev]);
     setResult(isWin ? "win" : "lose");
     setActiveTrade(null);
     setIsTrading(false);
@@ -702,7 +680,6 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
     // Reset result after a delay
     setTimeout(() => {
       setResult(null);
-      setSelectedPosition(null);
     }, 3000);
   };
 
