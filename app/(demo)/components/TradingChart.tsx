@@ -1,5 +1,6 @@
-"use client";
 /* eslint-disable no-unused-vars */
+
+"use client";
 import React, { useEffect, useState, useRef } from "react";
 import {
   calculateSessionResults,
