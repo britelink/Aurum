@@ -40,5 +40,3 @@ To configure different authentication methods, see [Configuration](https://labs.
 
 ## Join the community
 
-Join thousands of developers building full-stack apps with Convex:
-
