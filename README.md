@@ -38,5 +38,3 @@ To learn more about developing your project with Convex, check out:
 
 To configure different authentication methods, see [Configuration](https://labs.convex.dev/auth/config) in the Convex Auth docs.
 
-## Join the community
-
