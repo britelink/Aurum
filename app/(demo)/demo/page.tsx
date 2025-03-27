@@ -69,7 +69,7 @@ export default function TradingDemoPage() {
               </svg>
             </div>
             <h1 className="text-xl font-bold text-slate-800 dark:text-white">
-              Up or Down Game
+              Penny Game
             </h1>
           </div>
           <div className="flex items-center space-x-4">

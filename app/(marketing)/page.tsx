@@ -12,7 +12,7 @@ export default function Home() {
         title="Predict. Bet. Win."
         subtitle="Penny Game offers a new way to predict market movements with fixed-price bets and high returns on investment."
         secondaryCta="Learn More"
-        showChart={true}
+        showChart={false}
       />
 
       <section className="py-16 px-6 bg-gradient-to-br from-blue-50/80 to-slate-100/80 dark:from-slate-900 dark:to-blue-950/80">
