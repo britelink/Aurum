@@ -1,10 +1,12 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import TradingChart from "../components/TradingChart";
 
 export default function TradingDemoPage() {
   const [showTutorial, setShowTutorial] = useState(true);
-  const [onlineUsers] = useState(Math.floor(7000 + Math.random() * 500));
+  const [onlineUsers, setOnlineUsers] = useState(
+    Math.floor(7000 + Math.random() * 500),
+  );
   const [tradeHistory, setTradeHistory] = useState<
     {
       id: number;
@@ -18,7 +20,15 @@ export default function TradingDemoPage() {
     }[]
   >([]);
 
-  // Function to receive trade history updates from the TradingChart component
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const fluctuation = Math.floor(Math.random() * 50) - 25;
+      setOnlineUsers((prev) => Math.max(7000, prev + fluctuation));
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const onTradeComplete = (tradeData: {
     id: number;
     position: string;
@@ -29,7 +39,11 @@ export default function TradingDemoPage() {
     time: string;
     isWin?: boolean;
   }) => {
-    setTradeHistory((prev) => [tradeData, ...prev].slice(0, 10)); // Keep only the 10 most recent trades
+    setTradeHistory((prev) => [tradeData, ...prev].slice(0, 10));
+  };
+
+  const updateActivePlayers = (activePlayers: number) => {
+    setOnlineUsers(7000 + activePlayers);
   };
 
   return (
@@ -55,16 +69,16 @@ export default function TradingDemoPage() {
               </svg>
             </div>
             <h1 className="text-xl font-bold text-slate-800 dark:text-white">
-              PennySimulator Pro
+              Up or Down Game
             </h1>
           </div>
           <div className="flex items-center space-x-4">
             <div className="text-sm text-slate-600 dark:text-slate-400">
               <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-1"></span>
-              {onlineUsers.toLocaleString()} traders online
+              {onlineUsers.toLocaleString()} players online
             </div>
             <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium">
-              Create Real Account
+              Play For Real
             </button>
           </div>
         </div>
@@ -94,25 +108,19 @@ export default function TradingDemoPage() {
               </svg>
             </button>
             <h2 className="text-lg font-semibold text-blue-800 dark:text-blue-300 mb-2">
-              Welcome to the Trading Simulator
+              How to Play
             </h2>
             <p className="text-slate-700 dark:text-slate-300 mb-3">
-              This is a risk-free environment to practice trading. Here&apos;s
-              how it works:
+              It's super simple:
             </p>
             <ol className="list-decimal pl-5 text-slate-600 dark:text-slate-400 space-y-1">
-              <li>Select your investment amount and expiration time</li>
-              <li>
-                Predict if the price will go UP or DOWN within the time frame
-              </li>
-              <li>
-                If your prediction is correct, you earn 82% profit on your
-                investment
-              </li>
-              <li>If incorrect, you lose your investment amount</li>
+              <li>Bet $1 or $2</li>
+              <li>Guess if the line will go UP or DOWN</li>
+              <li>Win 80% more if you're right!</li>
+              <li>Lose your bet if you're wrong</li>
             </ol>
             <p className="mt-3 text-slate-700 dark:text-slate-300">
-              You start with a $1000 virtual balance. Good luck!
+              You start with $1000 play money. Have fun!
             </p>
           </div>
         )}
@@ -120,57 +128,19 @@ export default function TradingDemoPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main chart area */}
           <div className="lg:col-span-2">
-            <TradingChart onTradeComplete={onTradeComplete} />
+            <TradingChart
+              onTradeComplete={onTradeComplete}
+              onPlayersChange={updateActivePlayers}
+            />
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Market news */}
+            {/* Your bets history */}
             <div className="bg-white dark:bg-gray-900 border border-slate-200 dark:border-blue-900 rounded-xl overflow-hidden shadow-lg">
               <div className="bg-slate-50 dark:bg-gray-800 border-b border-slate-200 dark:border-blue-900 p-3">
                 <h2 className="font-bold text-slate-800 dark:text-white">
-                  Market News
-                </h2>
-              </div>
-              <div className="p-4 space-y-4">
-                {[
-                  {
-                    title: "EUR/USD Faces Resistance at 1.0840",
-                    time: "11:32",
-                    source: "MarketWatch",
-                  },
-                  {
-                    title: "Fed Minutes Show Hawkish Tone on Rates",
-                    time: "10:15",
-                    source: "Bloomberg",
-                  },
-                  {
-                    title: "ECB's Lagarde Hints at Potential Rate Cut",
-                    time: "09:45",
-                    source: "Reuters",
-                  },
-                ].map((news, index) => (
-                  <div
-                    key={index}
-                    className="border-b border-slate-100 dark:border-gray-800 pb-3 last:border-0 last:pb-0"
-                  >
-                    <h3 className="font-medium text-slate-800 dark:text-white text-sm">
-                      {news.title}
-                    </h3>
-                    <div className="flex justify-between mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      <span>{news.source}</span>
-                      <span>{news.time}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Trade history */}
-            <div className="bg-white dark:bg-gray-900 border border-slate-200 dark:border-blue-900 rounded-xl overflow-hidden shadow-lg">
-              <div className="bg-slate-50 dark:bg-gray-800 border-b border-slate-200 dark:border-blue-900 p-3">
-                <h2 className="font-bold text-slate-800 dark:text-white">
-                  Your Trade History
+                  Your Bets
                 </h2>
               </div>
               <div className="p-3">
@@ -191,13 +161,13 @@ export default function TradingDemoPage() {
                       <path d="M18 12h-2" />
                       <path d="M15 9l3 3-3 3" />
                     </svg>
-                    <p>Your trade history will appear here</p>
-                    <p>Place your first trade to get started</p>
+                    <p>No bets yet</p>
+                    <p>Make your first prediction!</p>
                   </div>
                 ) : (
                   <div>
                     <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2 mb-2">
-                      <span>Position</span>
+                      <span>Prediction</span>
                       <span>Amount</span>
                       <span>Result</span>
                     </div>
@@ -215,7 +185,7 @@ export default function TradingDemoPage() {
                             }`}
                           ></span>
                           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                            {trade.position === "buy" ? "BUY" : "SELL"}
+                            {trade.position === "buy" ? "UP" : "DOWN"}
                           </span>
                         </div>
                         <span className="text-sm text-slate-600 dark:text-slate-400">
@@ -238,7 +208,7 @@ export default function TradingDemoPage() {
                     ))}
                     <div className="mt-2 text-right">
                       <button className="text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400">
-                        View all trades
+                        View all bets
                       </button>
                     </div>
                   </div>
@@ -246,33 +216,33 @@ export default function TradingDemoPage() {
               </div>
             </div>
 
-            {/* Trading tips */}
+            {/* Quick Tips */}
             <div className="bg-white dark:bg-gray-900 border border-slate-200 dark:border-blue-900 rounded-xl overflow-hidden shadow-lg">
               <div className="bg-slate-50 dark:bg-gray-800 border-b border-slate-200 dark:border-blue-900 p-3">
                 <h2 className="font-bold text-slate-800 dark:text-white">
-                  Trading Tips
+                  Quick Tips
                 </h2>
               </div>
               <div className="p-4 space-y-3 text-sm text-slate-600 dark:text-slate-400">
                 <p>
-                  <span className="text-blue-500 dark:text-blue-400">⚡</span>
-                  Start with smaller investments while you learn the platform.
+                  <span className="text-blue-500 dark:text-blue-400">👉</span>
+                  Start with $1 bets until you get the hang of it.
                 </p>
                 <p>
                   <span className="text-emerald-500 dark:text-emerald-400">
-                    ⚡
+                    👉
                   </span>
-                  Look for trends before placing trades.
+                  Watch if the line is trending up or down before betting.
                 </p>
                 <p>
-                  <span className="text-amber-500 dark:text-amber-400">⚡</span>
-                  Don&apos;t chase losses with larger investments.
+                  <span className="text-amber-500 dark:text-amber-400">👉</span>
+                  Don't bet bigger after losing - stay consistent.
                 </p>
                 <p>
                   <span className="text-purple-500 dark:text-purple-400">
-                    ⚡
+                    👉
                   </span>
-                  Set a stop-loss to protect your capital.
+                  Have fun! It's just a game!
                 </p>
               </div>
             </div>
@@ -284,11 +254,10 @@ export default function TradingDemoPage() {
       <footer className="bg-white dark:bg-gray-900 border-t border-slate-200 dark:border-gray-800 py-4 mt-12">
         <div className="container mx-auto px-4 text-center text-sm text-slate-500 dark:text-slate-400">
           <p className="mb-2">
-            TradeSimulator Pro is for educational purposes only. No real money
-            is involved.
+            Up or Down is for fun only. No real money is involved in the demo.
           </p>
           <p>
-            © 2023 TradeSimulator Pro |{" "}
+            © 2023 Up or Down |{" "}
             <a href="#" className="text-blue-500">
               Terms
             </a>{" "}

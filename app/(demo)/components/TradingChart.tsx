@@ -22,9 +22,13 @@ interface TradingChartProps {
     time: string;
     isWin?: boolean;
   }) => void;
+  onPlayersChange?: (activePlayers: number) => void;
 }
 
-export default function TradingChart({ onTradeComplete }: TradingChartProps) {
+export default function TradingChart({
+  onTradeComplete,
+  onPlayersChange,
+}: TradingChartProps) {
   // State from MarketChart
   const [currentPrice, setCurrentPrice] = useState(1.0825);
   const [priceHistory, setPriceHistory] = useState<number[]>([]);
@@ -64,6 +68,11 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
     time: string;
   } | null>(null);
 
+  // Add this state to track which direction has more bets
+  const [betImbalance, setBetImbalance] = useState<"buy" | "sell" | "equal">(
+    "equal",
+  );
+
   // Add this new state to track trade path points
   const [tradePath, setTradePath] = useState<
     { x: number; y: number; price: number; time: number }[]
@@ -92,33 +101,61 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
     setCurrentPrice(initialHistory[initialHistory.length - 1]);
   }, []);
 
-  // Simulate price movement
+  // Simulate price movement (will be overridden during betting rounds)
   useEffect(() => {
     if (priceHistory.length === 0) return;
 
     const timer = setInterval(() => {
-      // Update price with zigzag movement (smaller movements for forex)
-      setCurrentPrice((prev) => {
-        if (Math.random() < 0.15) {
-          setDirection(-direction);
-        }
-
-        // More realistic forex pip movements
-        const volatility = 0.00005 + Math.random() * 0.0001;
-        const newPrice = prev + direction * volatility;
-        const boundedPrice = Math.max(1.0815, Math.min(1.0838, newPrice));
-
-        // Update history
-        setPriceHistory((oldHistory) => {
-          const newHistory = [...oldHistory, boundedPrice];
-          if (newHistory.length > 300) {
-            return newHistory.slice(newHistory.length - 300);
+      // Only move the price randomly when not in an active betting round
+      if (!isTrading) {
+        // Update price with zigzag movement (smaller movements for forex)
+        setCurrentPrice((prev) => {
+          if (Math.random() < 0.15) {
+            setDirection(-direction);
           }
-          return newHistory;
-        });
 
-        // If in active trading session, update trade path
-        if (isTrading && activeTrade) {
+          // More realistic forex pip movements
+          const volatility = 0.00005 + Math.random() * 0.0001;
+          const newPrice = prev + direction * volatility;
+          const boundedPrice = Math.max(1.0815, Math.min(1.0838, newPrice));
+
+          // Update history
+          setPriceHistory((oldHistory) => {
+            const newHistory = [...oldHistory, boundedPrice];
+            if (newHistory.length > 300) {
+              return newHistory.slice(newHistory.length - 300);
+            }
+            return newHistory;
+          });
+
+          return boundedPrice;
+        });
+      } else if (isTrading && activeTrade) {
+        // During active trading, move the price based on bet imbalance
+        setCurrentPrice((prev) => {
+          // If more people bet UP, move the line DOWN (line moves opposite to majority)
+          const moveDirection =
+            betImbalance === "buy" ? -1 : betImbalance === "sell" ? 1 : 0;
+
+          // If equal bets, make very small random movements
+          const volatility =
+            betImbalance === "equal"
+              ? (Math.random() - 0.5) * 0.00005
+              : 0.00008 + Math.random() * 0.00012;
+
+          const newPrice = prev + moveDirection * volatility;
+          const boundedPrice = Math.max(1.0815, Math.min(1.0838, newPrice));
+
+          // Update history
+          setPriceHistory((oldHistory) => {
+            const newHistory = [...oldHistory, boundedPrice];
+            if (newHistory.length > 300) {
+              return newHistory.slice(newHistory.length - 300);
+            }
+            return newHistory;
+          });
+
+          // Update trade path
           setTradePath((prevPath) => [
             ...prevPath,
             {
@@ -128,14 +165,14 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
               time: Date.now(),
             },
           ]);
-        }
 
-        return boundedPrice;
-      });
+          return boundedPrice;
+        });
+      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [direction, priceHistory, isTrading, activeTrade]);
+  }, [direction, priceHistory, isTrading, activeTrade, betImbalance]);
 
   // Timer countdown for active trades
   useEffect(() => {
@@ -145,46 +182,83 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
       const elapsedTime = Math.floor(
         (Date.now() - activeTrade.startTime) / 1000,
       );
-      const remaining = countDown - elapsedTime;
+      const remaining = sessionTime - elapsedTime;
 
       if (remaining <= 0) {
         clearInterval(timer);
         completeTrade();
+      } else {
+        setCountDown(remaining);
       }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isTrading, activeTrade]);
+  }, [isTrading, activeTrade, sessionTime]);
+
+  // Update bet imbalance whenever sessionPlayers changes
+  useEffect(() => {
+    if (sessionPlayers.length === 0) {
+      setBetImbalance("equal");
+      // Report player count to parent (safely handle the callback)
+      onPlayersChange?.(0);
+      return;
+    }
+
+    const buyTotal = sessionPlayers
+      .filter((p) => p.position === "buy")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const sellTotal = sessionPlayers
+      .filter((p) => p.position === "sell")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    if (buyTotal > sellTotal) {
+      setBetImbalance("buy");
+    } else if (sellTotal > buyTotal) {
+      setBetImbalance("sell");
+    } else {
+      setBetImbalance("equal");
+    }
+
+    // Report player count to parent (safely)
+    onPlayersChange?.(sessionPlayers.length);
+  }, [sessionPlayers, onPlayersChange]); // Always include onPlayersChange in the dependency array
 
   // Handle mouse movement over chart
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!chartRef.current || priceHistory.length === 0) return;
 
-    const rect = chartRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const chartRect = chartRef.current.getBoundingClientRect();
+    const x = e.clientX - chartRect.left;
+    const width = chartRect.width;
 
-    // Find the closest price point based on x position
-    const width = rect.width;
-    const pixelsPerPoint = width / priceHistory.length;
-    const index = Math.min(
-      Math.floor(x / pixelsPerPoint),
+    // Calculate the price index corresponding to the mouse position
+    const priceIndex = Math.min(
       priceHistory.length - 1,
+      Math.max(0, Math.floor((x / width) * priceHistory.length)),
     );
 
-    // Convert index to time (assuming 1 second per data point)
-    const date = new Date();
-    date.setSeconds(date.getSeconds() - (priceHistory.length - index));
-    const timeString = date.toLocaleTimeString();
+    // Get the price at this index
+    const price = priceHistory[priceIndex];
 
-    // Set hover info
+    // Find the y-coordinate for this price
+    const minPrice = Math.min(...priceHistory) - 0.0001;
+    const maxPrice = Math.max(...priceHistory) + 0.0001;
+    const range = maxPrice - minPrice;
+    const height = chartRect.height;
+    const y = height - ((price - minPrice) / range) * height;
+
+    // Show hover info at this position
     setHoverInfo({
       visible: true,
       x,
       y,
-      price: priceHistory[index],
-      index,
-      time: timeString,
+      price,
+      index: priceIndex,
+      time: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
     });
   };
 
@@ -289,253 +363,104 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
       ctx.stroke();
     }
 
-    // Draw grid lines
-    ctx.strokeStyle = isDarkMode
-      ? "rgba(255, 255, 255, 0.05)"
-      : "rgba(0, 0, 0, 0.05)";
-    ctx.lineWidth = 1;
-
-    // Horizontal grid lines (5 evenly spaced)
-    for (let i = 0; i < 5; i++) {
-      const y = height * (i / 4);
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-
-      // Price labels on the left
-      const labelPrice = maxPrice - (i / 4) * range;
-      ctx.fillStyle = isDarkMode
-        ? "rgba(255, 255, 255, 0.5)"
-        : "rgba(0, 0, 0, 0.5)";
-      ctx.font = "10px Arial";
-      ctx.textAlign = "left";
-      ctx.fillText(labelPrice.toFixed(5), 5, y - 5);
-    }
-
-    // Vertical grid lines (5 evenly spaced)
-    for (let i = 0; i < 5; i++) {
-      const x = width * (i / 4);
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
-
-    // Draw active trade position if exists
-    if (activeTrade) {
-      const tradeX = (width * activeTrade.x) / priceHistory.length;
-      const tradeY =
-        height - ((activeTrade.entryPrice - minPrice) / range) * height;
-
-      // Draw entry point with animation effect
-      ctx.beginPath();
-      ctx.arc(tradeX, tradeY, 6, 0, Math.PI * 2);
-      ctx.fillStyle = activeTrade.position === "buy" ? "#10b981" : "#ef4444";
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(tradeX, tradeY, 9, 0, Math.PI * 2);
-      ctx.strokeStyle = activeTrade.position === "buy" ? "#10b981" : "#ef4444";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      // Draw horizontal dashed line for entry price
-      ctx.beginPath();
-      ctx.setLineDash([3, 3]);
-      ctx.moveTo(tradeX, tradeY);
-      ctx.lineTo(width, tradeY);
-      ctx.strokeStyle =
-        activeTrade.position === "buy"
-          ? "rgba(16, 185, 129, 0.5)"
-          : "rgba(239, 68, 68, 0.5)";
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Label the position
-      ctx.font = "bold 10px Arial";
-      ctx.fillStyle = activeTrade.position === "buy" ? "#10b981" : "#ef4444";
-      ctx.textAlign = "left";
-      ctx.fillText(
-        `${activeTrade.position.toUpperCase()} @ ${activeTrade.entryPrice.toFixed(5)}`,
-        tradeX + 15,
-        tradeY - 5,
-      );
-    }
-
-    // Draw hover indicator if active
+    // Draw hover indicator/crosshair if visible
     if (hoverInfo && hoverInfo.visible) {
-      const hoverX = (width * hoverInfo.index) / priceHistory.length;
-      const hoverY =
-        height - ((priceHistory[hoverInfo.index] - minPrice) / range) * height;
-
-      // Draw vertical line
-      ctx.beginPath();
-      ctx.setLineDash([4, 2]);
-      ctx.moveTo(hoverX, 0);
-      ctx.lineTo(hoverX, height);
+      // Vertical line
       ctx.strokeStyle = isDarkMode
-        ? "rgba(255, 255, 255, 0.3)"
-        : "rgba(0, 0, 0, 0.2)";
-      ctx.lineWidth = 1;
+        ? "rgba(255,255,255,0.2)"
+        : "rgba(0,0,0,0.1)";
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(hoverInfo.x, 0);
+      ctx.lineTo(hoverInfo.x, height);
       ctx.stroke();
 
-      // Draw horizontal line
+      // Horizontal line
       ctx.beginPath();
-      ctx.moveTo(0, hoverY);
-      ctx.lineTo(width, hoverY);
+      ctx.moveTo(0, hoverInfo.y);
+      ctx.lineTo(width, hoverInfo.y);
       ctx.stroke();
-
-      // Draw hover point
-      ctx.beginPath();
-      ctx.arc(hoverX, hoverY, 5, 0, Math.PI * 2);
-      ctx.fillStyle = "#3b82f6";
-      ctx.fill();
       ctx.setLineDash([]);
-    }
 
-    // Draw current price indicator
-    const lastX = width;
-    const lastY = height - ((currentPrice - minPrice) / range) * height;
-
-    // Determine color based on price movement
-    const priceChangeColor =
-      currentPrice > priceHistory[priceHistory.length - 2]
-        ? "#10b981" // More modern green
-        : "#ef4444"; // More modern red
-
-    // Draw current price point with shadow effect
-    ctx.shadowColor = priceChangeColor;
-    ctx.shadowBlur = 8;
-    ctx.fillStyle = priceChangeColor;
-    ctx.beginPath();
-    ctx.arc(lastX - 5, lastY, 6, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Reset shadow
-    ctx.shadowBlur = 0;
-
-    // Draw the trade path if in active trading session
-    if (isTrading && activeTrade && tradePath.length > 0) {
-      // Calculate y positions for all points in trade path
-      const updatedTradePath = tradePath.map((point) => ({
-        ...point,
-        y: height - ((point.price - minPrice) / range) * height,
-      }));
-
-      // Draw path highlight - a semi-transparent area along the price path
+      // Price dot
+      ctx.fillStyle = isDarkMode ? "#fbbf24" : "#d97706";
       ctx.beginPath();
-      ctx.moveTo(updatedTradePath[0].x, updatedTradePath[0].y);
-
-      // Create path from entry point to current position
-      for (let i = 1; i < updatedTradePath.length; i++) {
-        // For x position, calculate based on time progress in session
-        const timeProgress =
-          (updatedTradePath[i].time - activeTrade.startTime) /
-          (sessionTime * 1000);
-        const x = width - (1 - timeProgress) * width;
-
-        ctx.lineTo(x, updatedTradePath[i].y);
-      }
-
-      // Close the path to bottom for area fill
-      ctx.lineTo(width, height);
-      ctx.lineTo(updatedTradePath[0].x, height);
-      ctx.closePath();
-
-      // Use position-appropriate colors
-      const pathColor =
-        activeTrade.position === "buy"
-          ? "rgba(16, 185, 129, 0.15)" // Green for buy
-          : "rgba(239, 68, 68, 0.15)"; // Red for sell
-
-      ctx.fillStyle = pathColor;
-      ctx.fill();
-
-      // Draw the path line itself
-      ctx.beginPath();
-      ctx.moveTo(updatedTradePath[0].x, updatedTradePath[0].y);
-
-      for (let i = 1; i < updatedTradePath.length; i++) {
-        const timeProgress =
-          (updatedTradePath[i].time - activeTrade.startTime) /
-          (sessionTime * 1000);
-        const x = width - (1 - timeProgress) * width;
-
-        ctx.lineTo(x, updatedTradePath[i].y);
-      }
-
-      ctx.strokeStyle =
-        activeTrade.position === "buy"
-          ? "rgba(16, 185, 129, 0.8)" // Green for buy
-          : "rgba(239, 68, 68, 0.8)"; // Red for sell
-
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      // Draw entry point marker
-      ctx.beginPath();
-      ctx.arc(updatedTradePath[0].x, updatedTradePath[0].y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = activeTrade.position === "buy" ? "#10b981" : "#ef4444";
+      ctx.arc(hoverInfo.x, hoverInfo.y, 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = "white";
+      ctx.stroke();
+    }
+
+    // Draw active trade entry point and trade path if visible
+    if (activeTrade && isTrading && tradePath.length > 0) {
+      const entryPrice = activeTrade.entryPrice;
+      const entryY = height - ((entryPrice - minPrice) / range) * height;
+
+      // Draw entry point
+      ctx.fillStyle = activeTrade.position === "buy" ? "#10b981" : "#ef4444";
+      ctx.beginPath();
+      ctx.arc(0, entryY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw trade path
+      ctx.strokeStyle = isDarkMode ? "#fbbf24" : "#d97706";
       ctx.lineWidth = 2;
+      ctx.beginPath();
+
+      // Start at entry point
+      ctx.moveTo(0, entryY);
+
+      // Calculate and update y-values for trade path
+      for (let i = 0; i < tradePath.length; i++) {
+        const pathPoint = tradePath[i];
+        const pathPointY =
+          height - ((pathPoint.price - minPrice) / range) * height;
+        const pathPointX = (width * (i + 1)) / (tradePath.length + 1);
+
+        // Update the y-value in the path data
+        tradePath[i] = { ...pathPoint, y: pathPointY };
+
+        ctx.lineTo(pathPointX, pathPointY);
+      }
       ctx.stroke();
 
-      // Add entry label
-      ctx.font = "bold 11px Arial";
-      ctx.fillStyle = activeTrade.position === "buy" ? "#10b981" : "#ef4444";
-      ctx.textAlign = "left";
-      const labelY =
-        updatedTradePath[0].y > height - 40
-          ? updatedTradePath[0].y - 25
-          : updatedTradePath[0].y + 25;
-
-      ctx.fillText(
-        `ENTRY: ${activeTrade.entryPrice.toFixed(5)}`,
-        updatedTradePath[0].x + 10,
-        labelY,
-      );
-
-      // Add "Target" label at the right edge
-      const lastPoint = updatedTradePath[updatedTradePath.length - 1];
-      ctx.fillText(
-        `CURRENT: ${lastPoint.price.toFixed(5)}`,
-        width - 150,
-        lastPoint.y - 10,
-      );
-
-      // Draw "Session Progress" indicator at the bottom of chart
-      const sessionProgress = Math.min(
-        (Date.now() - activeTrade.startTime) / (sessionTime * 1000),
-        1,
-      );
-      ctx.fillStyle = isDarkMode ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)";
-      ctx.fillRect(0, height - 5, width, 5);
-      ctx.fillStyle = activeTrade.position === "buy" ? "#10b981" : "#ef4444";
-      ctx.fillRect(0, height - 5, width * sessionProgress, 5);
+      // Draw current price indicator
+      const currentY = height - ((currentPrice - minPrice) / range) * height;
+      ctx.fillStyle = "#fbbf24"; // Amber color
+      ctx.beginPath();
+      ctx.arc(width, currentY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
+
+    // Draw price labels
+    ctx.fillStyle = isDarkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.7)";
+    ctx.font = "10px sans-serif";
+
+    // Simplify to just show High, Middle, Low
+    ctx.textAlign = "left";
+    ctx.fillText(`High: ${maxPrice.toFixed(4)}`, 10, 15);
+    ctx.fillText(`Price: ${currentPrice.toFixed(4)}`, 10, height / 2);
+    ctx.fillText(`Low: ${minPrice.toFixed(4)}`, 10, height - 10);
+
+    // Draw current price label on right side
+    ctx.textAlign = "right";
+    ctx.fillStyle = isDarkMode ? "#fbbf24" : "#d97706";
+    ctx.fillText(`Current: ${currentPrice.toFixed(4)}`, width - 10, 15);
   }, [
     priceHistory,
     currentPrice,
-    activeTrade,
-    tradePath,
     hoverInfo,
     isTrading,
-    sessionTime,
+    activeTrade,
+    tradePath,
   ]);
 
-  // Initialize with some random players
-  useEffect(() => {
-    // Simulate 15-25 other players for the session
-    const randomPlayerCount = Math.floor(Math.random() * 10) + 15;
-    const simulatedPlayers = generateSimulatedSession(randomPlayerCount);
-    setSessionPlayers(simulatedPlayers);
-  }, []);
-
-  // Function to place a bet
-  const placeBet = (position: BetPosition) => {
-    if (balance < betAmount) return;
+  // Function to place a bet - renamed for clarity
+  const placeBet = async (position: BetPosition) => {
+    if (isTrading || balance < betAmount) return;
 
     // Remove any existing bets by this player
     const filteredPlayers = sessionPlayers.filter((p) => p.id !== userPlayerId);
@@ -547,7 +472,9 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
       amount: betAmount,
     };
 
-    setSessionPlayers([...filteredPlayers, userBet]);
+    // Generate random number of AI players (0-15)
+    const aiPlayers = generateRandomAIPlayers(0, 15, position, betAmount);
+    setSessionPlayers([...filteredPlayers, ...aiPlayers, userBet]);
     setBalance((prev) => prev - betAmount);
     setIsTrading(true);
 
@@ -575,21 +502,49 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
 
     // Start countdown to session end
     startSessionCountdown();
+
+    // Report new player count immediately (safely)
+    onPlayersChange?.(1 + aiPlayers.length); // User + AI players
+  };
+
+  // Helper function to generate AI players
+  const generateRandomAIPlayers = (
+    min: number,
+    max: number,
+    userPosition: BetPosition,
+    userBetAmount: BetAmount,
+  ) => {
+    const playerCount = min + Math.floor(Math.random() * (max - min + 1));
+    const aiPlayers: Player[] = [];
+
+    for (let i = 0; i < playerCount; i++) {
+      // Generate random position - make it somewhat biased against the user's position
+      // to create more interesting gameplay (55-45 bias)
+      const position =
+        Math.random() < 0.55
+          ? userPosition === "buy"
+            ? "sell"
+            : "buy"
+          : userPosition === "buy"
+            ? "buy"
+            : "sell";
+
+      // Generate random bet amount (either 1 or 2)
+      const amount = Math.random() < 0.7 ? 1 : 2;
+
+      aiPlayers.push({
+        id: `ai-${i}-${Math.random().toString(36).substring(2, 9)}`,
+        position,
+        amount,
+      });
+    }
+
+    return aiPlayers;
   };
 
   // Function to start countdown timer
   const startSessionCountdown = () => {
     setCountDown(sessionTime);
-    const timer = setInterval(() => {
-      setCountDown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          endSession();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
   };
 
   // Function to end a trading session
@@ -597,23 +552,62 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
     setIsTrading(false);
 
     // Determine the winner based on price movement
-    const startPrice = tradePath[0]?.price || currentPrice;
+    const startPrice =
+      tradePath[0]?.price || activeTrade?.entryPrice || currentPrice;
     const endPrice = currentPrice;
     const priceWentUp = endPrice > startPrice;
     const winningPosition: BetPosition = priceWentUp ? "buy" : "sell";
 
-    // Calculate session results
-    const result = calculateSessionResults(sessionPlayers, winningPosition);
-    setSessionResult(result);
+    // Calculate winner distributions based on new logic
+    const result = calculatePrizeDistribution(sessionPlayers, winningPosition);
+
+    // Create a proper SessionResult object
+    const sessionResultObject: SessionResult = {
+      winningPosition: result.winningPosition,
+      players: sessionPlayers,
+      buyTotal: sessionPlayers
+        .filter((p) => p.position === "buy")
+        .reduce((sum, p) => sum + p.amount, 0),
+      sellTotal: sessionPlayers
+        .filter((p) => p.position === "sell")
+        .reduce((sum, p) => sum + p.amount, 0),
+      winners: result.players
+        .filter((p) => p.hasWon)
+        .map((p) => ({
+          playerId: p.id,
+          position:
+            sessionPlayers.find((sp) => sp.id === p.id)?.position || "buy",
+          profit: p.payout - p.betAmount,
+          initialBet: p.betAmount as BetAmount,
+          totalReturn: p.payout,
+          roi: ((p.payout - p.betAmount) / p.betAmount) * 100,
+        })),
+      losers: result.players
+        .filter((p) => !p.hasWon)
+        .map((p) => ({
+          playerId: p.id,
+          position:
+            sessionPlayers.find((sp) => sp.id === p.id)?.position || "sell",
+          profit: -p.betAmount,
+          initialBet: p.betAmount as BetAmount,
+          totalReturn: 0,
+          roi: -100,
+        })),
+      isFoul: false,
+      isNeutral: result.isTie,
+      timestamp: Date.now(),
+    };
+
+    setSessionResult(sessionResultObject);
 
     // Find the user's result
-    const userResult = [...result.winners, ...result.losers].find(
-      (player) => player.playerId === userPlayerId,
+    const userResult = result.players.find(
+      (player) => player.id === userPlayerId,
     );
 
     if (userResult) {
       // Update user's balance
-      setBalance((prev) => prev + userResult.totalReturn);
+      setBalance((prev) => prev + userResult.payout);
 
       // Create trade history entry
       const tradeData = {
@@ -622,12 +616,12 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
         amount: activeTrade?.amount || 0,
         entryPrice: activeTrade?.entryPrice || 0,
         exitPrice: currentPrice,
-        profit: userResult.profit,
+        profit: userResult.payout - (activeTrade?.amount || 0), // profit = payout - bet
         time: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
         }),
-        isWin: userResult.profit > 0,
+        isWin: userResult.hasWon,
       };
 
       // Notify parent component
@@ -637,55 +631,104 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
     }
 
     // Reset for next session
-    setActiveTrade(null);
-    setTradePath([]);
-    setCountDown(0);
-    setSessionPlayers([]);
+    setTimeout(() => {
+      setActiveTrade(null);
+      setTradePath([]);
+      setCountDown(0);
+      setSessionPlayers([]);
+      setSessionResult(null);
+    }, 5000);
+  };
+
+  // Calculate prize distribution based on the new logic
+  const calculatePrizeDistribution = (
+    players: Player[],
+    winningPosition: BetPosition,
+  ): {
+    isTie: boolean;
+    winningPosition: BetPosition | null;
+    players: {
+      id: string;
+      hasWon: boolean;
+      betAmount: number;
+      payout: number;
+    }[];
+    houseFee: number;
+  } => {
+    // Calculate total bets for each side
+    const upTotal = players
+      .filter((p) => p.position === "buy")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const downTotal = players
+      .filter((p) => p.position === "sell")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    // If equal bets on both sides, it's a tie
+    if (upTotal === downTotal) {
+      return {
+        isTie: true,
+        winningPosition: null,
+        players: players.map((p) => ({
+          id: p.id,
+          hasWon: false,
+          betAmount: p.amount,
+          payout: p.amount, // return original bet
+        })),
+        houseFee: 0,
+      };
+    }
+
+    // Calculate winning and losing pools
+    const winningPlayers = players.filter(
+      (p) => p.position === winningPosition,
+    );
+    const losingPlayers = players.filter((p) => p.position !== winningPosition);
+
+    const winningPool = winningPlayers.reduce((sum, p) => sum + p.amount, 0);
+    const losingPool = losingPlayers.reduce((sum, p) => sum + p.amount, 0);
+
+    // Calculate house fee (8% of losing pool)
+    const houseFee = losingPool * 0.08;
+
+    // Calculate prize pool (92% of losing pool)
+    const prizePool = losingPool * 0.92;
+
+    // Calculate results for all players
+    const playerResults = players.map((player) => {
+      if (player.position === winningPosition) {
+        // Winners get their bet back plus a proportional share of the prize pool
+        const share = player.amount / winningPool;
+        const prize = prizePool * share;
+        return {
+          id: player.id,
+          hasWon: true,
+          betAmount: player.amount,
+          payout: player.amount + prize, // original bet + winnings
+        };
+      } else {
+        // Losers get nothing
+        return {
+          id: player.id,
+          hasWon: false,
+          betAmount: player.amount,
+          payout: 0,
+        };
+      }
+    });
+
+    return {
+      isTie: false,
+      winningPosition,
+      players: playerResults,
+      houseFee,
+    };
   };
 
   // Complete an active trade
   const completeTrade = () => {
     if (!activeTrade) return;
-
-    let isWin = false;
-    let profit = -activeTrade.amount;
-
-    // Determine win/lose based on position and price movement
-    if (
-      (activeTrade.position === "buy" &&
-        currentPrice > activeTrade.entryPrice) ||
-      (activeTrade.position === "sell" && currentPrice < activeTrade.entryPrice)
-    ) {
-      isWin = true;
-      profit = Math.floor(activeTrade.amount * 0.82);
-      setBalance((prev) => prev + activeTrade.amount + profit);
-    }
-
-    // Add to trade history
-    const completedTrade = {
-      id: activeTrade.id,
-      position: activeTrade.position,
-      amount: activeTrade.amount,
-      entryPrice: activeTrade.entryPrice,
-      exitPrice: currentPrice,
-      profit: isWin ? profit : -activeTrade.amount,
-      time: new Date().toLocaleTimeString(),
-      isWin,
-    };
-
-    // Call the callback to notify parent component
-    if (onTradeComplete) {
-      onTradeComplete(completedTrade);
-    }
-
-    setResult(isWin ? "win" : "lose");
-    setActiveTrade(null);
-    setIsTrading(false);
-
-    // Reset result after a delay
-    setTimeout(() => {
-      setResult(null);
-    }, 3000);
+    endSession();
   };
 
   // Calculate time remaining for active trade
@@ -693,15 +736,15 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
     if (!activeTrade) return 0;
 
     const elapsed = Math.floor((Date.now() - activeTrade.startTime) / 1000);
-    return Math.max(0, countDown - elapsed);
+    return Math.max(0, sessionTime - elapsed);
   };
 
-  // Calculate price difference for display
-  const priceDifference =
-    priceHistory.length > 1
-      ? (currentPrice - priceHistory[0]).toFixed(5)
-      : "0.00000";
-  const isPositive = parseFloat(priceDifference) >= 0;
+  // Calculate price difference for display - simplified
+  const priceTrend =
+    priceHistory.length > 1 && currentPrice > priceHistory[0]
+      ? "rising"
+      : "falling";
+  const isPositive = priceTrend === "rising";
 
   // Toggle expanded view
   const toggleExpanded = () => {
@@ -709,68 +752,31 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
   };
 
   return (
-    <div
-      className={`bg-white dark:bg-gray-900 border border-slate-200 dark:border-blue-900 rounded-xl overflow-hidden shadow-lg w-full transition-all duration-300 ease-in-out ${
-        isExpanded
-          ? "fixed inset-2.5 z-50 m-auto max-w-none max-h-none rounded-xl"
-          : ""
-      }`}
-    >
-      {/* Header with asset info and balance */}
-      <div className="flex justify-between items-center p-3 border-b border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-800">
-        <div className="flex items-center">
-          <div className="flex items-center bg-slate-100 dark:bg-gray-900 rounded-md p-1 mr-2">
-            <span className="text-slate-800 dark:text-white font-bold mr-1">
-              🇪🇺
-            </span>
-            <span className="text-slate-800 dark:text-white font-bold mr-1">
-              /
-            </span>
-            <span className="text-slate-800 dark:text-white font-bold">🇺🇸</span>
+    <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-slate-200 dark:border-blue-900 overflow-hidden h-full flex flex-col">
+      {/* Chart header */}
+      <div className="bg-slate-50 dark:bg-gray-800 border-b border-slate-200 dark:border-blue-900 p-3 flex justify-between items-center">
+        <div>
+          <div className="text-sm font-medium text-slate-500 dark:text-slate-400">
+            Your Balance
           </div>
-          <div>
-            <div className="font-medium text-slate-800 dark:text-white">
-              EUR/USD
-            </div>
-            <div
-              className={`text-xs font-medium ${isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
-            >
-              {isPositive ? "+" : ""}
-              {priceDifference}
-            </div>
+          <div className="text-2xl font-bold text-slate-800 dark:text-white">
+            ${balance.toFixed(2)}
           </div>
         </div>
-        <div className="flex items-center space-x-4">
-          {result && (
-            <div
-              className={`px-3 py-1 rounded text-sm font-medium ${
-                result === "win"
-                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
-                  : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-              }`}
-            >
-              {result === "win"
-                ? `+$${Math.floor(betAmount * 0.82)}`
-                : `-$${betAmount}`}
-            </div>
-          )}
-          <div className="text-lg font-bold text-slate-800 dark:text-white">
-            Balance: ${balance}
+        <div className="text-right">
+          <div className="text-sm font-medium text-slate-500 dark:text-slate-400">
+            Current Price
           </div>
-          <div className="text-xl font-bold text-slate-800 dark:text-white">
-            {currentPrice.toFixed(5)}
-          </div>
-
-          {/* Expand/Shrink Button */}
-          <button
-            onClick={toggleExpanded}
-            className="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-full p-1 text-slate-600 dark:text-slate-300"
-            aria-label={isExpanded ? "Shrink chart" : "Expand chart"}
+          <div
+            className={`text-xl font-bold flex items-center ${
+              isPositive
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-red-600 dark:text-red-400"
+            }`}
           >
-            {isExpanded ? (
+            {isPositive ? (
               <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
+                className="w-4 h-4 mr-1"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -779,13 +785,12 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
+                  d="M5 10l7-7m0 0l7 7m-7-7v18"
                 />
               </svg>
             ) : (
               <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
+                className="w-4 h-4 mr-1"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -794,10 +799,31 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"
+                  d="M19 14l-7 7m0 0l-7-7m7 7V3"
                 />
               </svg>
             )}
+            {currentPrice.toFixed(4)}
+          </div>
+        </div>
+        <div>
+          <button
+            onClick={toggleExpanded}
+            className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d={isExpanded ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"}
+              />
+            </svg>
           </button>
         </div>
       </div>
@@ -818,59 +844,17 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
           </div>
         )}
 
-        {/* Hover tooltip */}
-        {hoverInfo && hoverInfo.visible && (
-          <div
-            className="absolute bg-slate-800/90 text-white text-xs rounded px-3 py-2 shadow-lg z-10 pointer-events-none"
-            style={{
-              left: Math.min(
-                hoverInfo.x + 10,
-                chartRef.current!.clientWidth - 120,
-              ),
-              top: Math.min(
-                hoverInfo.y - 60,
-                chartRef.current!.clientHeight - 70,
-              ),
-            }}
-          >
-            <div className="font-bold text-blue-300">{hoverInfo.time}</div>
-            <div className="font-medium mt-1">
-              Price: {hoverInfo.price.toFixed(5)}
-            </div>
-            <div className="text-slate-300 text-[10px] mt-1">
-              {hoverInfo.index < priceHistory.length - 1 ? (
-                <>
-                  Change:{" "}
-                  <span
-                    className={
-                      hoverInfo.price > priceHistory[hoverInfo.index + 1]
-                        ? "text-green-400"
-                        : "text-red-400"
-                    }
-                  >
-                    {(
-                      hoverInfo.price - priceHistory[hoverInfo.index + 1]
-                    ).toFixed(5)}
-                  </span>
-                </>
-              ) : (
-                "Current price"
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Session info overlay */}
+        {/* Simplified Session info overlay */}
         <div className="absolute top-4 left-4 bg-slate-800/90 text-white px-3 py-2 rounded text-xs">
-          <div className="font-bold mb-1">Current Session</div>
+          <div className="font-bold mb-1">Current Round</div>
           <div>
-            Buy: $
+            UP Bets: $
             {sessionPlayers
               .filter((p) => p.position === "buy")
               .reduce((sum, p) => sum + p.amount, 0)}
           </div>
           <div>
-            Sell: $
+            DOWN Bets: $
             {sessionPlayers
               .filter((p) => p.position === "sell")
               .reduce((sum, p) => sum + p.amount, 0)}
@@ -879,63 +863,76 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
           {isTrading && <div className="mt-1">Ends in: {countDown}s</div>}
         </div>
 
-        {/* Session result overlay */}
+        {/* Bet direction prediction */}
+        {isTrading && betImbalance !== "equal" && (
+          <div className="absolute bottom-4 right-4 bg-slate-800/80 text-white px-3 py-1 rounded text-xs">
+            Prediction: Line will go {betImbalance === "buy" ? "DOWN" : "UP"}
+            <span className="ml-1 opacity-75">(opposite of majority)</span>
+          </div>
+        )}
+
+        {/* Simplified Session result overlay */}
         {sessionResult && (
           <div className="absolute inset-0 bg-slate-900/80 flex items-center justify-center">
             <div className="bg-white dark:bg-slate-800 p-4 rounded-lg max-w-xs text-center">
               <div className="text-xl font-bold mb-2">
-                {sessionResult.isFoul
-                  ? "No Winners"
-                  : sessionResult.isNeutral
-                    ? "Draw"
-                    : `${sessionResult.winningPosition?.toUpperCase()} Wins!`}
+                {sessionResult.isNeutral
+                  ? "It's a Tie! Same bets on both sides."
+                  : `${sessionResult.winningPosition === "buy" ? "UP" : "DOWN"} Wins!`}
               </div>
-              {!sessionResult.isFoul && !sessionResult.isNeutral && (
+              {!sessionResult.isNeutral && (
                 <div className="mb-3">
                   <div className="text-sm text-slate-600 dark:text-slate-400">
                     {sessionResult.winningPosition === "buy"
-                      ? "Price went UP"
-                      : "Price went DOWN"}
+                      ? "Line went UP"
+                      : "Line went DOWN"}
                   </div>
-                  <div className="mt-2 flex justify-center space-x-4">
-                    <div className="text-center">
-                      <div className="text-xs text-slate-500">$1 Bettors</div>
-                      <div className="font-medium">
-                        $
-                        {sessionResult.winners
-                          .find((w) => w.initialBet === 1)
-                          ?.totalReturn.toFixed(2) || "0.00"}
-                      </div>
+
+                  {/* User's result */}
+                  {sessionResult.winners.find(
+                    (p) => p.playerId === userPlayerId,
+                  ) ? (
+                    <div className="mt-3 text-green-500 font-bold text-lg">
+                      You WON $
+                      {sessionResult.winners
+                        .find((p) => p.playerId === userPlayerId)
+                        ?.profit.toFixed(2)}
+                      !
                     </div>
-                    <div className="text-center">
-                      <div className="text-xs text-slate-500">$2 Bettors</div>
-                      <div className="font-medium">
-                        $
-                        {sessionResult.winners
-                          .find((w) => w.initialBet === 2)
-                          ?.totalReturn.toFixed(2) || "0.00"}
-                      </div>
+                  ) : (
+                    <div className="mt-3 text-red-500 font-bold text-lg">
+                      {sessionResult.isNeutral
+                        ? "You got your bet back."
+                        : "You lost your bet."}
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
               <div className="text-sm mb-1">
-                {sessionResult.isFoul
-                  ? "All bets were on the same side - no money lost"
-                  : sessionResult.isNeutral
-                    ? "Buy and Sell were exactly equal - continuing to next round"
-                    : "Results calculated with 8% platform fee"}
+                {sessionResult.isNeutral
+                  ? "Everyone gets their money back!"
+                  : "Winners share 92% of losing bets."}
+              </div>
+              <div className="text-xs text-slate-500 mt-2">
+                House fee: $
+                {(
+                  sessionResult.losers.reduce(
+                    (sum, loser) => sum + loser.initialBet,
+                    0,
+                  ) * 0.08
+                ).toFixed(2)}{" "}
+                (8%)
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Investment amount selection - Update to only allow $1 and $2 */}
+      {/* Investment amount selection - simplified labels */}
       <div className="p-3 border-t border-slate-200 dark:border-blue-900">
         <div>
           <label className="text-sm text-slate-600 dark:text-slate-400 mb-2 block">
-            Bet Amount
+            How Much to Bet?
           </label>
           <div className="flex space-x-2">
             {[1, 2].map((amount) => (
@@ -956,40 +953,40 @@ export default function TradingChart({ onTradeComplete }: TradingChartProps) {
         </div>
       </div>
 
-      {/* Trading controls */}
+      {/* Trading controls - simplified labels */}
       <div className="grid grid-cols-2 gap-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-800">
         <button
           className={`bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded ${isTrading ? "opacity-50 cursor-not-allowed" : ""}`}
           onClick={() => placeBet("buy")}
           disabled={isTrading || balance < betAmount}
         >
-          BUY (UP)
+          BET UP ↑
         </button>
         <button
           className={`bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded ${isTrading ? "opacity-50 cursor-not-allowed" : ""}`}
           onClick={() => placeBet("sell")}
           disabled={isTrading || balance < betAmount}
         >
-          SELL (DOWN)
+          BET DOWN ↓
         </button>
       </div>
 
-      {/* Stats footer */}
+      {/* Stats footer - simplified explanations */}
       <div className="grid grid-cols-4 gap-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-900 text-xs">
         <div className="text-center">
-          <div className="text-blue-500 dark:text-blue-300">SESSION</div>
+          <div className="text-blue-500 dark:text-blue-300">ROUND</div>
           <div className="font-medium text-slate-800 dark:text-white">
-            {isTrading ? `${countDown}s` : "Ready"}
+            {isTrading ? `${countDown}s left` : "Ready to bet!"}
           </div>
         </div>
         <div className="text-center">
-          <div className="text-blue-500 dark:text-blue-300">PAYOUT</div>
+          <div className="text-blue-500 dark:text-blue-300">WIN SHARE</div>
           <div className="font-medium text-slate-800 dark:text-white">
-            100%+
+            92% of pool
           </div>
         </div>
         <div className="text-center">
-          <div className="text-blue-500 dark:text-blue-300">FEE</div>
+          <div className="text-blue-500 dark:text-blue-300">GAME FEE</div>
           <div className="font-medium text-slate-800 dark:text-white">8%</div>
         </div>
         <div className="text-center">
