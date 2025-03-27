@@ -3,12 +3,10 @@
 "use client";
 import React, { useEffect, useState, useRef } from "react";
 import {
-  calculateSessionResults,
   BetPosition,
   BetAmount,
   Player,
   SessionResult,
-  generateSimulatedSession,
 } from "../utils/aurumDemo";
 
 interface TradingChartProps {
@@ -48,7 +46,7 @@ export default function TradingChart({
   const [sessionTime] = useState(30); // seconds for demo
   const [countDown, setCountDown] = useState(30);
   const [isTrading, setIsTrading] = useState(false);
-  const [result, setResult] = useState<"win" | "lose" | null>(null);
+
   const [activeTrade, setActiveTrade] = useState<{
     id: number;
     position: string;
@@ -512,7 +510,6 @@ export default function TradingChart({
     min: number,
     max: number,
     userPosition: BetPosition,
-    userBetAmount: BetAmount,
   ) => {
     const playerCount = min + Math.floor(Math.random() * (max - min + 1));
     const aiPlayers: Player[] = [];

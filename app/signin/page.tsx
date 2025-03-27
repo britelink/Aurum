@@ -1,16 +1,11 @@
 "use client";
 
-import { useAuthActions } from "@convex-dev/auth/react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { UseGoogleSignIn } from "./UseGoogle";
 import Link from "next/link";
 
 export default function SignIn() {
-  const { signIn } = useAuthActions();
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-800 via-blue-900 to-slate-900">

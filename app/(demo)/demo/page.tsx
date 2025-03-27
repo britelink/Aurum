@@ -111,13 +111,13 @@ export default function TradingDemoPage() {
               How to Play
             </h2>
             <p className="text-slate-700 dark:text-slate-300 mb-3">
-              It's super simple:
+              It&apos;s super simple:
             </p>
             <ol className="list-decimal pl-5 text-slate-600 dark:text-slate-400 space-y-1">
               <li>Bet $1 or $2</li>
               <li>Guess if the line will go UP or DOWN</li>
-              <li>Win 80% more if you're right!</li>
-              <li>Lose your bet if you're wrong</li>
+              <li>Win 80% more if you&apos;re right!</li>
+              <li>Lose your bet if you&apos;re wrong</li>
             </ol>
             <p className="mt-3 text-slate-700 dark:text-slate-300">
               You start with $1000 play money. Have fun!
@@ -236,13 +236,13 @@ export default function TradingDemoPage() {
                 </p>
                 <p>
                   <span className="text-amber-500 dark:text-amber-400">👉</span>
-                  Don't bet bigger after losing - stay consistent.
+                  Don&apos;t bet bigger after losing - stay consistent.
                 </p>
                 <p>
                   <span className="text-purple-500 dark:text-purple-400">
                     👉
                   </span>
-                  Have fun! It's just a game!
+                  Have fun! It&apos;s just a game!
                 </p>
               </div>
             </div>
