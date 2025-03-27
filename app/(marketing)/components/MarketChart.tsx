@@ -27,7 +27,11 @@ export default function MarketChart() {
     // Generate simpler price history
     for (let i = 0; i < 100; i++) {
       if (Math.random() < 0.15) {
-        direction > 0 ? setDirection(-1) : setDirection(1);
+        if (direction > 0) {
+          setDirection(-1);
+        } else {
+          setDirection(1);
+        }
       }
 
       // Simpler price changes
@@ -76,7 +80,11 @@ export default function MarketChart() {
     const timer = setInterval(() => {
       // Random direction change
       if (Math.random() < 0.15) {
-        setDirection((prev) => prev * -1);
+        if (direction > 0) {
+          setDirection(-1);
+        } else {
+          setDirection(1);
+        }
       }
 
       // Update price
