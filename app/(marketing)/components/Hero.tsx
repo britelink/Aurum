@@ -1,6 +1,7 @@
 import AurumButton from "@/components/AurumButton";
 import React from "react";
 import MarketChart from "./MarketChart";
+import Link from "next/link";
 
 interface HeroProps {
   title: string;
@@ -45,24 +46,28 @@ export default function Hero({
             <p className="text-xl text-blue-100 mb-8">{subtitle}</p>
 
             <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
-              <AurumButton
-                variant="primary"
-                size="lg"
-                onClick={ctaAction}
-                className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-blue-900 border-0"
-              >
-                {ctaText}
-              </AurumButton>
+              <Link href="/demo">
+                <AurumButton
+                  variant="primary"
+                  size="lg"
+                  onClick={ctaAction}
+                  className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-blue-900 border-0"
+                >
+                  {ctaText}
+                </AurumButton>
+              </Link>
 
               {secondaryCta && (
-                <AurumButton
-                  variant="outline"
-                  size="lg"
-                  onClick={secondaryCtaAction}
-                  className="border-blue-300 text-blue-100 hover:bg-blue-800/50"
-                >
-                  {secondaryCta}
-                </AurumButton>
+                <Link href="/demo">
+                  <AurumButton
+                    variant="outline"
+                    size="lg"
+                    onClick={secondaryCtaAction}
+                    className="border-blue-300 text-blue-100 hover:bg-blue-800/50"
+                  >
+                    {secondaryCta}
+                  </AurumButton>
+                </Link>
               )}
             </div>
 

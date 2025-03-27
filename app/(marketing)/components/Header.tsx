@@ -225,10 +225,10 @@ export default function Header() {
                   </div>
                 </div>
                 <Link
-                  href="/trade"
+                  href="/demo"
                   className="flex items-center justify-center gap-2 w-full px-3 py-2 text-sm bg-gradient-to-r from-amber-400 to-amber-500 text-blue-900 font-medium rounded hover:from-amber-500 hover:to-amber-600 transition-all"
                 >
-                  Trade Now
+                  Bet Now
                 </Link>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-blue-700/50 dark:bg-slate-800/50 p-3 rounded-lg">

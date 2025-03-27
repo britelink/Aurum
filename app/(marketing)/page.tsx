@@ -11,7 +11,7 @@ export default function Home() {
       <Hero
         title="Predict. Bet. Win."
         subtitle="Penny Game offers a new way to predict market movements with fixed-price bets and high returns on investment."
-        secondaryCta="Learn More"
+        secondaryCta="Demo Account"
         showChart={false}
       />
 
