@@ -471,7 +471,7 @@ export default function TradingChart({
     };
 
     // Generate random number of AI players (0-15)
-    const aiPlayers = generateRandomAIPlayers(0, 15, position, betAmount);
+    const aiPlayers = generateRandomAIPlayers(0, 15, position);
     setSessionPlayers([...filteredPlayers, ...aiPlayers, userBet]);
     setBalance((prev) => prev - betAmount);
     setIsTrading(true);
