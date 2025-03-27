@@ -55,7 +55,7 @@ export default function TradingDemoPage() {
               </svg>
             </div>
             <h1 className="text-xl font-bold text-slate-800 dark:text-white">
-              AurumSimulator Pro
+              PennySimulator Pro
             </h1>
           </div>
           <div className="flex items-center space-x-4">

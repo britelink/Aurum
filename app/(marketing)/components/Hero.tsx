@@ -15,7 +15,7 @@ interface HeroProps {
 export default function Hero({
   title,
   subtitle,
-  ctaText = "Start Trading",
+  ctaText = "Start Betting",
   ctaAction,
   secondaryCta,
   secondaryCtaAction,

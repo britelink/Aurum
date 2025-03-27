@@ -29,7 +29,7 @@ export default function SignIn() {
               <path d="M3 14L12 19L21 14" stroke="white" strokeWidth="2" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white">Aurum Capital</h1>
+          <h1 className="text-2xl font-bold text-white">Penny Game</h1>
         </div>
       </div>
 
@@ -47,7 +47,7 @@ export default function SignIn() {
               <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
                 {flow === "signIn"
                   ? "Access your portfolio and trading dashboard"
-                  : "Start your trading journey with Aurum Capital"}
+                  : "Start your trading journey with Penny Game"}
               </p>
             </div>
 
@@ -66,7 +66,7 @@ export default function SignIn() {
                   <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
                 </div>
 
-                {/* Email form */}
+                {/* Email form 
                 <form
                   className="space-y-4"
                   onSubmit={(e) => {
@@ -131,23 +131,23 @@ export default function SignIn() {
                     {flow === "signIn" ? "Sign in" : "Create account"}
                   </button>
 
-                  <div className="text-center mt-4">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                      {flow === "signIn"
-                        ? "Don't have an account?"
-                        : "Already have an account?"}
-                      <span
-                        className="ml-1 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium cursor-pointer"
-                        onClick={() =>
-                          setFlow(flow === "signIn" ? "signUp" : "signIn")
-                        }
-                      >
-                        {flow === "signIn" ? "Sign up" : "Sign in"}
-                      </span>
-                    </p>
-                  </div>
-                </form>
+                </form>*/}
 
+                <div className="text-center mt-4">
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    {flow === "signIn"
+                      ? "Don't have an account?"
+                      : "Already have an account?"}
+                    <span
+                      className="ml-1 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium cursor-pointer"
+                      onClick={() =>
+                        setFlow(flow === "signIn" ? "signUp" : "signIn")
+                      }
+                    >
+                      {flow === "signIn" ? "Sign up" : "Sign in"}
+                    </span>
+                  </p>
+                </div>
                 {/* Terms */}
                 <p className="text-xs text-center text-slate-500 dark:text-slate-500 mt-6">
                   By signing in, you agree to our{" "}
@@ -180,7 +180,7 @@ export default function SignIn() {
               <div className="text-xl font-bold text-white">180%</div>
             </div>
             <div className="bg-blue-900/50 backdrop-blur-sm border border-blue-500/20 p-3 rounded-md">
-              <div className="text-xs text-blue-300">Active Traders</div>
+              <div className="text-xs text-blue-300">Active Bets</div>
               <div className="text-xl font-bold text-white">12.7K</div>
             </div>
           </div>

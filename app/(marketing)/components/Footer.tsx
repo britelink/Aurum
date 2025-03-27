@@ -17,10 +17,8 @@ export default function Footer() {
           <div>
             <Link href="/" className="flex items-center mb-4">
               <span className="font-serif font-bold text-2xl">
-                <span className="text-white dark:text-blue-100">Aurum</span>
-                <span className="text-amber-400 dark:text-amber-300">
-                  Capital
-                </span>
+                <span className="text-white dark:text-blue-100">Penny</span>
+                <span className="text-amber-400 dark:text-amber-300">Game</span>
               </span>
             </Link>
             <p className="text-blue-200 dark:text-blue-300 mb-4">

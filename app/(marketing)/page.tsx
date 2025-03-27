@@ -9,8 +9,8 @@ export default function Home() {
   return (
     <>
       <Hero
-        title="Predict. Trade. Win."
-        subtitle="Aurum Capital offers a new way to predict market movements with fixed-price bets and high returns on investment."
+        title="Predict. Bet. Win."
+        subtitle="Penny Game offers a new way to predict market movements with fixed-price bets and high returns on investment."
         secondaryCta="Learn More"
         showChart={true}
       />
@@ -19,11 +19,11 @@ export default function Home() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-serif font-bold mb-4 text-blue-800 dark:text-blue-300">
-              How Aurum Works
+              How Penny Game Works
             </h2>
             <p className="text-lg text-blue-700 dark:text-blue-300 max-w-3xl mx-auto">
-              Aurum is an online betting platform that allows users to predict
-              market movements in a simple, fast, and rewarding way.
+              Penny Game is an online betting platform that allows users to
+              predict market movements in a simple, fast, and rewarding way.
             </p>
           </div>
 
@@ -58,9 +58,9 @@ export default function Home() {
                 Experience Our Platform
               </h2>
               <p className="text-lg text-slate-600 dark:text-slate-300 mb-6">
-                Try our interactive demo to see how Aurum works. Predict whether
-                the price index will move up or down within the 10-second
-                window.
+                Try our interactive demo to see how Penny Game works. Predict
+                whether the price index will move up or down within the
+                10-second window.
               </p>
 
               <ul className="space-y-3 mb-8">
@@ -106,11 +106,11 @@ export default function Home() {
       <section className="py-16 px-6 bg-blue-900 dark:bg-blue-950 text-white">
         <div className="max-w-7xl mx-auto text-center">
           <h2 className="text-3xl font-serif font-bold mb-4 text-blue-100">
-            Ready to Start Trading?
+            Ready to Start Betting?
           </h2>
           <p className="text-lg text-blue-200 mb-8 max-w-2xl mx-auto">
-            Join thousands of traders who are already experiencing the Aurum
-            advantage with high returns and rapid trading sessions.
+            Join thousands of traders who are already experiencing the Penny
+            Game advantage with high returns and rapid trading sessions.
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
@@ -131,7 +131,7 @@ export default function Home() {
               Frequently Asked Questions
             </h2>
             <p className="text-lg text-slate-600 dark:text-slate-300 max-w-3xl mx-auto">
-              Get answers to the most common questions about Aurum Capital.
+              Get answers to the most common questions about Penny Game.
             </p>
           </div>
 
@@ -142,7 +142,7 @@ export default function Home() {
               </h3>
               <p className="text-slate-600 dark:text-slate-300">
                 You can deposit funds using ECO-USD or directly transfer money
-                between Aurum accounts. Our system ensures quick and secure
+                between Penny accounts. Our system ensures quick and secure
                 transactions.
               </p>
             </div>
@@ -152,8 +152,8 @@ export default function Home() {
                 What is the minimum bet?
               </h3>
               <p className="text-slate-600 dark:text-slate-300">
-                Aurum offers fixed bet lots of $1 and $2 only, making it easy to
-                manage your trading strategy and risk.
+                Penny Game offers fixed bet lots of $1 and $2 only, making it
+                easy to manage your trading strategy and risk.
               </p>
             </div>
 

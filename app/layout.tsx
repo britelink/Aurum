@@ -30,7 +30,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Aurum Capital",
+  title: "Penny Game",
   description: "Modern and Professional Investment Solutions",
   icons: {
     icon: "/convex.svg",

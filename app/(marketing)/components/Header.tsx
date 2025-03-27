@@ -59,8 +59,8 @@ export default function Header() {
       <div className="max-w-7xl mx-auto flex justify-between items-center">
         <Link href="/" className="flex items-center">
           <span className="font-serif font-bold text-2xl">
-            <span className="text-white dark:text-blue-100">Aurum</span>
-            <span className="text-amber-400 dark:text-amber-300">Capital</span>
+            <span className="text-white dark:text-blue-100">Penny</span>
+            <span className="text-amber-400 dark:text-amber-300">Game</span>
           </span>
         </Link>
 
@@ -131,7 +131,7 @@ export default function Header() {
                 href="/signin"
                 className="hidden md:flex items-center gap-2 px-4 py-1.5 text-sm bg-gradient-to-r from-amber-400 to-amber-500 text-blue-900 font-medium rounded hover:from-amber-500 hover:to-amber-600 transition-all"
               >
-                Start Trading
+                Start Betting
               </Link>
             </>
           )}
@@ -192,7 +192,7 @@ export default function Header() {
               href="/trade"
               className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-blue-900 font-medium rounded-md py-2 px-4 text-center hover:from-amber-500 hover:to-amber-600 transition-all"
             >
-              Start Trading
+              Start Betting
             </Link>
 
             <SignOutButton

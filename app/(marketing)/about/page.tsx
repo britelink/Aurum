@@ -6,7 +6,7 @@ export default function About() {
   return (
     <>
       <Hero
-        title="About Aurum Capital"
+        title="About Penny Game"
         subtitle="Redefining the online betting experience with innovative, transparent, and rewarding prediction markets."
       />
 
@@ -16,9 +16,9 @@ export default function About() {
             <div>
               <h2 className="text-3xl font-serif font-bold mb-6">Our Vision</h2>
               <p className="text-lg text-muted-foreground mb-6">
-                Aurum Capital was founded with a clear vision: to create a
-                betting platform that is fair, transparent, and rewarding for
-                all participants.
+                Penny Game was founded with a clear vision: to create a betting
+                platform that is fair, transparent, and rewarding for all
+                participants.
               </p>
               <p className="text-lg text-muted-foreground mb-6">
                 Our innovative approach combines the excitement of rapid trading
@@ -224,7 +224,7 @@ export default function About() {
               Platform Metrics
             </h2>
             <p className="text-lg text-slate-700 dark:text-slate-300 max-w-3xl mx-auto">
-              Aurum Capital delivers consistent performance metrics that
+              Penny Game delivers consistent performance metrics that
               demonstrate our platform&apos;s reliability and potential.
             </p>
           </div>
@@ -289,8 +289,8 @@ export default function About() {
                 Payment Options
               </h3>
               <p className="text-lg text-blue-700 dark:text-blue-200 mb-6">
-                Aurum offers flexible and secure payment methods for deposits
-                and withdrawals:
+                Penny Game offers flexible and secure payment methods for
+                deposits and withdrawals:
               </p>
 
               <div className="space-y-6 mb-8">
@@ -300,7 +300,7 @@ export default function About() {
                   </h4>
                   <p className="text-blue-700 dark:text-blue-100">
                     Convert cash to ECO-USD via any ECO-USD agent, then transfer
-                    to your Aurum account for instant deposits.
+                    to your Penny Game account for instant deposits.
                   </p>
                 </div>
 
@@ -309,8 +309,9 @@ export default function About() {
                     Direct Transfers
                   </h4>
                   <p className="text-blue-700 dark:text-blue-100">
-                    Send money directly between Aurum accounts, allowing users
-                    to exchange cash for aUSD without any platform intervention.
+                    Send money directly between Penny Game accounts, allowing
+                    users to exchange cash for aUSD without any platform
+                    intervention.
                   </p>
                 </div>
               </div>
@@ -326,7 +327,7 @@ export default function About() {
             <div className="order-1 lg:order-2 flex justify-center">
               <div className="bg-blue-50/80 backdrop-blur-sm dark:bg-slate-800/60 border border-blue-100 dark:border-blue-900/50 p-8 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 max-w-md w-full">
                 <h3 className="text-2xl font-serif font-bold mb-6 text-blue-800 dark:text-blue-300 text-center">
-                  Why Choose Aurum
+                  Why Choose Penny Game
                 </h3>
 
                 <div className="space-y-6">
@@ -384,11 +385,11 @@ export default function About() {
       <section className="py-16 px-6 bg-gradient-to-br from-blue-50/80 to-slate-100/80 dark:from-slate-900 dark:to-blue-950/90">
         <div className="max-w-7xl mx-auto text-center">
           <h2 className="text-3xl font-serif font-bold mb-4 text-blue-800 dark:text-blue-300">
-            Join the Aurum Community
+            Join the Penny Game Community
           </h2>
           <p className="text-lg text-blue-700 dark:text-blue-200 mb-8 max-w-2xl mx-auto">
-            Start trading now and experience the next generation of online
-            betting with Aurum Capital.
+            Start betting now and experience the next generation of online
+            betting with Penny Game.
           </p>
 
           <AurumButton

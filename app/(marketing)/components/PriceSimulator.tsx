@@ -354,7 +354,7 @@ export default function PriceSimulator() {
             </svg>
           </div>
           <h2 className="text-lg font-bold text-blue-600 dark:text-blue-400">
-            Aurum Capital
+            Penny Game
           </h2>
         </div>
         <div className="flex items-center">

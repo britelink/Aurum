@@ -63,7 +63,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
       <header className="sticky top-0 z-10 bg-gray-800/80 backdrop-blur-sm p-4 border-b border-gray-700 flex justify-between items-center">
-        <h2 className="text-xl font-bold text-white">Aurum Betting Platform</h2>
+        <h2 className="text-xl font-bold text-white">Penny Betting Platform</h2>
         <SignOutButton />
       </header>
       <main className="container mx-auto p-4 md:p-8">
