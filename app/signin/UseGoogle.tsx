@@ -7,9 +7,17 @@ export function UseGoogleSignIn() {
   const [isHovering, setIsHovering] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
 
+  const handleSignIn = async () => {
+    try {
+      await signIn("google");
+    } catch (error) {
+      console.error("Sign in failed:", error);
+    }
+  };
+
   return (
     <button
-      onClick={() => void signIn("google")}
+      onClick={handleSignIn}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => {
         setIsHovering(false);

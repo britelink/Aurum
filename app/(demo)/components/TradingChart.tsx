@@ -264,7 +264,7 @@ export default function TradingChart({
     setHoverInfo(null);
   };
 
-  // Draw the chart with hover indicators and color-coded line segments
+  // Replace the existing draw logic with this simplified version
   useEffect(() => {
     if (!chartRef.current || priceHistory.length === 0) return;
 
@@ -298,163 +298,51 @@ export default function TradingChart({
     const maxPrice = Math.max(...priceHistory) + 0.0001;
     const range = maxPrice - minPrice;
 
-    // Draw background - more responsive to color mode
-    const isDarkMode = document.documentElement.classList.contains("dark");
-    ctx.fillStyle = isDarkMode ? "#0f172a" : "#f8fafc";
+    // Draw gradient background
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, "rgba(59, 130, 246, 0.1)");
+    gradient.addColorStop(1, "rgba(59, 130, 246, 0)");
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
-    // Add gradient area under the chart
-    const areaGradient = ctx.createLinearGradient(0, 0, 0, height);
-    if (isDarkMode) {
-      areaGradient.addColorStop(0, "rgba(37, 99, 235, 0.2)");
-      areaGradient.addColorStop(1, "rgba(37, 99, 235, 0)");
-    } else {
-      areaGradient.addColorStop(0, "rgba(59, 130, 246, 0.1)");
-      areaGradient.addColorStop(1, "rgba(59, 130, 246, 0)");
-    }
-
-    // Draw the area under the price line
-    ctx.fillStyle = areaGradient;
+    // Draw price line
+    ctx.strokeStyle = "#3b82f6";
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(0, height); // Start at bottom left
 
-    // Draw to the first point
-    const firstY = height - ((priceHistory[0] - minPrice) / range) * height;
-    ctx.lineTo(0, firstY);
+    // Draw line
+    priceHistory.forEach((price, index) => {
+      const x = (width * index) / priceHistory.length;
+      const y = height - ((price - minPrice) / range) * height;
 
-    // Draw for each price point
-    for (let i = 0; i < priceHistory.length; i++) {
-      const x = (width * i) / priceHistory.length;
-      const y = height - ((priceHistory[i] - minPrice) / range) * height;
-      ctx.lineTo(x, y);
-    }
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
 
-    // Close the path and fill
-    ctx.lineTo(width, height);
-    ctx.closePath();
+    ctx.stroke();
+
+    // Draw current price point
+    const lastX = (width * (priceHistory.length - 1)) / priceHistory.length;
+    const lastY = height - ((currentPrice - minPrice) / range) * height;
+
+    ctx.fillStyle =
+      priceHistory[priceHistory.length - 1] >
+      priceHistory[priceHistory.length - 2]
+        ? "#10b981" // green
+        : "#ef4444"; // red
+
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
     ctx.fill();
 
-    // Draw the price line with color segments
-    ctx.lineWidth = 2;
-
-    // Draw each segment with appropriate color
-    for (let i = 1; i < priceHistory.length; i++) {
-      const prevX = (width * (i - 1)) / priceHistory.length;
-      const prevY =
-        height - ((priceHistory[i - 1] - minPrice) / range) * height;
-      const x = (width * i) / priceHistory.length;
-      const y = height - ((priceHistory[i] - minPrice) / range) * height;
-
-      // Determine color based on price movement
-      const priceIsRising = priceHistory[i] >= priceHistory[i - 1];
-      ctx.strokeStyle = priceIsRising
-        ? isDarkMode
-          ? "#10b981"
-          : "#059669" // Green for price increase
-        : isDarkMode
-          ? "#ef4444"
-          : "#dc2626"; // Red for price decrease
-
-      ctx.beginPath();
-      ctx.moveTo(prevX, prevY);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    }
-
-    // Draw hover indicator/crosshair if visible
-    if (hoverInfo && hoverInfo.visible) {
-      // Vertical line
-      ctx.strokeStyle = isDarkMode
-        ? "rgba(255,255,255,0.2)"
-        : "rgba(0,0,0,0.1)";
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath();
-      ctx.moveTo(hoverInfo.x, 0);
-      ctx.lineTo(hoverInfo.x, height);
-      ctx.stroke();
-
-      // Horizontal line
-      ctx.beginPath();
-      ctx.moveTo(0, hoverInfo.y);
-      ctx.lineTo(width, hoverInfo.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Price dot
-      ctx.fillStyle = isDarkMode ? "#fbbf24" : "#d97706";
-      ctx.beginPath();
-      ctx.arc(hoverInfo.x, hoverInfo.y, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "white";
-      ctx.stroke();
-    }
-
-    // Draw active trade entry point and trade path if visible
-    if (activeTrade && isTrading && tradePath.length > 0) {
-      const entryPrice = activeTrade.entryPrice;
-      const entryY = height - ((entryPrice - minPrice) / range) * height;
-
-      // Draw entry point
-      ctx.fillStyle = activeTrade.position === "buy" ? "#10b981" : "#ef4444";
-      ctx.beginPath();
-      ctx.arc(0, entryY, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Draw trade path
-      ctx.strokeStyle = isDarkMode ? "#fbbf24" : "#d97706";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-
-      // Start at entry point
-      ctx.moveTo(0, entryY);
-
-      // Calculate and update y-values for trade path
-      for (let i = 0; i < tradePath.length; i++) {
-        const pathPoint = tradePath[i];
-        const pathPointY =
-          height - ((pathPoint.price - minPrice) / range) * height;
-        const pathPointX = (width * (i + 1)) / (tradePath.length + 1);
-
-        // Update the y-value in the path data
-        tradePath[i] = { ...pathPoint, y: pathPointY };
-
-        ctx.lineTo(pathPointX, pathPointY);
-      }
-      ctx.stroke();
-
-      // Draw current price indicator
-      const currentY = height - ((currentPrice - minPrice) / range) * height;
-      ctx.fillStyle = "#fbbf24"; // Amber color
-      ctx.beginPath();
-      ctx.arc(width, currentY, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "white";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-
     // Draw price labels
-    ctx.fillStyle = isDarkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.7)";
-    ctx.font = "10px sans-serif";
-
-    // Simplify to just show High, Middle, Low
-    ctx.textAlign = "left";
-    ctx.fillText(`High: ${maxPrice.toFixed(4)}`, 10, 15);
-    ctx.fillText(`Price: ${currentPrice.toFixed(4)}`, 10, height / 2);
-    ctx.fillText(`Low: ${minPrice.toFixed(4)}`, 10, height - 10);
-
-    // Draw current price label on right side
-    ctx.textAlign = "right";
-    ctx.fillStyle = isDarkMode ? "#fbbf24" : "#d97706";
-    ctx.fillText(`Current: ${currentPrice.toFixed(4)}`, width - 10, 15);
-  }, [
-    priceHistory,
-    currentPrice,
-    hoverInfo,
-    isTrading,
-    activeTrade,
-    tradePath,
-  ]);
+    ctx.fillStyle = "#1e293b";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText(currentPrice.toFixed(4), width - 10, 20);
+  }, [priceHistory, currentPrice]);
 
   // Function to place a bet - renamed for clarity
   const placeBet = async (position: BetPosition) => {
