@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import TradingChart from "../components/TradingChart";
-import BirdRaceBetting from "../components/Bird";
 
 export default function TradingDemoPage() {
   const [showTutorial, setShowTutorial] = useState(true);
@@ -133,7 +132,6 @@ export default function TradingDemoPage() {
               onTradeComplete={onTradeComplete}
               onPlayersChange={updateActivePlayers}
             />
-            <BirdRaceBetting />
           </div>
 
           {/* Sidebar */}

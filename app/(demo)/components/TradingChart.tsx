@@ -82,8 +82,8 @@ export default function TradingChart({
     let price = 1.0825;
     let tempDirection = Math.random() > 0.5 ? 1 : -1;
 
-    // Generate 300 points for 5 minutes (assuming 1 second intervals)
-    for (let i = 0; i < 300; i++) {
+    // Generate 100 points for 5 minutes (assuming 1 second intervals)
+    for (let i = 0; i < 100; i++) {
       if (Math.random() < 0.15) {
         tempDirection *= -1;
       }
@@ -120,8 +120,8 @@ export default function TradingChart({
           // Update history
           setPriceHistory((oldHistory) => {
             const newHistory = [...oldHistory, boundedPrice];
-            if (newHistory.length > 300) {
-              return newHistory.slice(newHistory.length - 300);
+            if (newHistory.length > 100) {
+              return newHistory.slice(newHistory.length - 100);
             }
             return newHistory;
           });
@@ -147,8 +147,8 @@ export default function TradingChart({
           // Update history
           setPriceHistory((oldHistory) => {
             const newHistory = [...oldHistory, boundedPrice];
-            if (newHistory.length > 300) {
-              return newHistory.slice(newHistory.length - 300);
+            if (newHistory.length > 100) {
+              return newHistory.slice(newHistory.length - 100);
             }
             return newHistory;
           });
