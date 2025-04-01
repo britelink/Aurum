@@ -57,7 +57,7 @@ export default function TradingChart({
     y: number;
   } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [setHoverInfo] = useState<{
+  const [, setHoverInfo] = useState<{
     visible: boolean;
     x: number;
     y: number;
