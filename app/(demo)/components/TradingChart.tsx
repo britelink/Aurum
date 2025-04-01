@@ -312,6 +312,29 @@ export default function TradingChart({
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
+    // Draw area under the line
+    ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
+    ctx.beginPath();
+
+    // Start at bottom left
+    ctx.moveTo(0, height);
+
+    // Draw line to first point
+    const firstY = height - ((priceHistory[0] - minPrice) / range) * height;
+    ctx.lineTo(0, firstY);
+
+    // Draw history points
+    priceHistory.forEach((price, index) => {
+      const x = (width * index) / priceHistory.length;
+      const y = height - ((price - minPrice) / range) * height;
+      ctx.lineTo(x, y);
+    });
+
+    // Complete area
+    ctx.lineTo(width, height);
+    ctx.closePath();
+    ctx.fill();
+
     // Draw price line
     ctx.strokeStyle = "#3b82f6";
     ctx.lineWidth = 2;
