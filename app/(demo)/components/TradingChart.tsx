@@ -82,7 +82,7 @@ export default function TradingChart({
     let price = 1.0825;
     let tempDirection = Math.random() > 0.5 ? 1 : -1;
 
-    // Generate 100 points for 5 minutes (assuming 1 second intervals)
+    // Generate 20 points for 5 minutes (assuming 1 second intervals)
     for (let i = 0; i < 100; i++) {
       if (Math.random() < 0.15) {
         tempDirection *= -1;
@@ -264,7 +264,7 @@ export default function TradingChart({
     setHoverInfo(null);
   };
 
-  // Replace the existing draw logic with this simplified version
+  // Update the draw logic in the useEffect
   useEffect(() => {
     if (!chartRef.current || priceHistory.length === 0) return;
 
@@ -338,11 +338,51 @@ export default function TradingChart({
     ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
     ctx.fill();
 
+    // Draw entry point if there's an active trade
+    if (activeTrade) {
+      const entryX =
+        (width * (priceHistory.length - (sessionTime - countDown))) /
+        priceHistory.length;
+      const entryY =
+        height - ((activeTrade.entryPrice - minPrice) / range) * height;
+
+      // Draw a line from the entry point to the current price
+      ctx.strokeStyle = "#f59e0b80"; // semi-transparent orange
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(entryX, entryY);
+      ctx.lineTo(lastX, lastY);
+      ctx.stroke();
+
+      // Draw entry point marker
+      ctx.fillStyle = "#f59e0b"; // orange color
+      ctx.beginPath();
+      ctx.arc(entryX, entryY, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw entry price label with better visibility
+      ctx.fillStyle = "#10b981"; // green color
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "left";
+
+      // Add background for better text visibility
+      ctx.fillStyle = "#ffffff90"; // semi-transparent white
+      ctx.fillRect(entryX + 8, entryY - 20, 100, 20);
+
+      // Draw text
+      ctx.fillStyle = "#10b981"; // green color
+      ctx.fillText(
+        `Entry: ${activeTrade.entryPrice.toFixed(4)}`,
+        entryX + 10,
+        entryY - 10,
+      );
+    }
+
     // Draw price labels
     ctx.fillStyle = "#1e293b";
     ctx.font = "bold 12px sans-serif";
     ctx.fillText(currentPrice.toFixed(4), width - 10, 20);
-  }, [priceHistory, currentPrice]);
+  }, [priceHistory, currentPrice, activeTrade, countDown, sessionTime]);
 
   // Function to place a bet - renamed for clarity
   const placeBet = async (position: BetPosition) => {
@@ -610,10 +650,122 @@ export default function TradingChart({
     };
   };
 
-  // Complete an active trade
+  // Add this function to show trade results visually
+  const showTradeResult = () => {
+    if (!chartRef.current || !sessionResult) return;
+
+    // Get canvas context
+    const chartElement = chartRef.current;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Setup canvas dimensions
+    const width = chartElement.clientWidth;
+    const height = chartElement.clientHeight;
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.position = "absolute";
+    canvas.style.top = "0";
+    canvas.style.left = "0";
+    canvas.style.pointerEvents = "none";
+
+    // Add an identifier class to track this canvas
+    canvas.className = "trade-result-overlay";
+
+    // Clear any existing result overlay
+    const existingOverlay = chartElement.querySelector(".trade-result-overlay");
+    if (existingOverlay) {
+      chartElement.removeChild(existingOverlay);
+    }
+
+    // Add to chart
+    chartElement.appendChild(canvas);
+
+    // Draw trade result
+    if (tradePath.length > 1) {
+      const startPoint = tradePath[0];
+      const endPoint = tradePath[tradePath.length - 1];
+      const priceHistory = [...tradePath.map((point) => point.price)];
+      const minPrice = Math.min(...priceHistory) - 0.0001;
+      const maxPrice = Math.max(...priceHistory) + 0.0001;
+      const range = maxPrice - minPrice;
+
+      // Draw entry point
+      ctx.fillStyle = "#f59e0b";
+      ctx.beginPath();
+      ctx.arc(
+        startPoint.x,
+        height - ((startPoint.price - minPrice) / range) * height,
+        6,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+
+      // Draw exit point
+      const userResult = sessionResult.winners.find(
+        (p) => p.playerId === userPlayerId,
+      );
+      const isWin = userResult?.hasWon;
+      ctx.fillStyle = isWin ? "#10b981" : "#ef4444";
+      ctx.beginPath();
+      ctx.arc(
+        endPoint.x,
+        height - ((endPoint.price - minPrice) / range) * height,
+        8,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+
+      // Draw connecting line
+      ctx.strokeStyle = isWin ? "#10b981" : "#ef4444";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(
+        startPoint.x,
+        height - ((startPoint.price - minPrice) / range) * height,
+      );
+
+      for (let i = 1; i < tradePath.length; i++) {
+        const point = tradePath[i];
+        const y = height - ((point.price - minPrice) / range) * height;
+        ctx.lineTo(point.x, y);
+      }
+      ctx.stroke();
+
+      // Add text labels
+      ctx.font = "12px sans-serif";
+      ctx.fillStyle = "#f59e0b";
+      ctx.fillText(
+        "Entry",
+        startPoint.x + 10,
+        height - ((startPoint.price - minPrice) / range) * height - 10,
+      );
+
+      ctx.fillStyle = isWin ? "#10b981" : "#ef4444";
+      ctx.fillText(
+        isWin ? "WIN" : "LOSS",
+        endPoint.x + 10,
+        height - ((endPoint.price - minPrice) / range) * height - 10,
+      );
+    }
+
+    // Automatically remove after 5 seconds
+    setTimeout(() => {
+      const overlay = chartElement.querySelector(".trade-result-overlay");
+      if (overlay) {
+        chartElement.removeChild(overlay);
+      }
+    }, 5000);
+  };
+
+  // Update completeTrade function
   const completeTrade = () => {
     if (!activeTrade) return;
     endSession();
+    setTimeout(showTradeResult, 100);
   };
 
   // Calculate time remaining for active trade
@@ -634,6 +786,35 @@ export default function TradingChart({
   // Toggle expanded view
   const toggleExpanded = () => {
     setIsExpanded(!isExpanded);
+  };
+
+  // Add this new function to create a "price movement" indicator
+  const getPriceMovementIndicator = () => {
+    if (priceHistory.length < 10) return null;
+
+    // Get the last 10 price points to determine recent trend
+    const recentPrices = priceHistory.slice(-10);
+    const firstPrice = recentPrices[0];
+    const lastPrice = recentPrices[recentPrices.length - 1];
+    const priceDiff = lastPrice - firstPrice;
+
+    // Calculate volatility (standard deviation)
+    const avg =
+      recentPrices.reduce((sum, p) => sum + p, 0) / recentPrices.length;
+    const variance =
+      recentPrices.reduce((sum, p) => sum + Math.pow(p - avg, 2), 0) /
+      recentPrices.length;
+    const volatility = Math.sqrt(variance);
+
+    // Determine trend strength based on price difference relative to volatility
+    const strength = Math.abs(priceDiff) / volatility;
+
+    if (strength < 0.5) return "Sideways";
+    if (priceDiff > 0) {
+      return strength > 1.5 ? "Strong Uptrend" : "Mild Uptrend";
+    } else {
+      return strength > 1.5 ? "Strong Downtrend" : "Mild Downtrend";
+    }
   };
 
   return (
@@ -713,7 +894,7 @@ export default function TradingChart({
         </div>
       </div>
 
-      {/* Chart with hover capability */}
+      {/* Chart container */}
       <div
         ref={chartRef}
         className={`relative overflow-hidden bg-slate-50 dark:bg-gray-900 ${
@@ -811,73 +992,92 @@ export default function TradingChart({
             </div>
           </div>
         )}
+
+        {/* Update the return JSX to include the trend indicator */}
+        {isTrading && (
+          <div className="absolute bottom-20 left-4 bg-slate-800/90 text-white px-3 py-2 rounded text-xs">
+            <div className="font-bold mb-1">Market Trend</div>
+            <div className="flex items-center">
+              <span className={isPositive ? "text-green-400" : "text-red-400"}>
+                {isPositive ? "↗️" : "↘️"} {getPriceMovementIndicator()}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Investment amount selection - simplified labels */}
-      <div className="p-3 border-t border-slate-200 dark:border-blue-900">
-        <div>
-          <label className="text-sm text-slate-600 dark:text-slate-400 mb-2 block">
-            How Much to Bet?
-          </label>
-          <div className="flex space-x-2">
-            {[1, 2].map((amount) => (
-              <button
-                key={amount}
-                onClick={() => setBetAmount(amount as BetAmount)}
-                className={`px-3 py-1 rounded text-sm ${
-                  betAmount === amount
-                    ? "bg-blue-600 text-white dark:bg-blue-700"
-                    : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
-                } ${isTrading ? "opacity-50 cursor-not-allowed" : ""}`}
-                disabled={isTrading}
-              >
-                ${amount}
-              </button>
-            ))}
+      {/* Controls container */}
+      <div className="flex flex-col">
+        {/* Bet amount selection */}
+        <div className="p-3 border-t border-slate-200 dark:border-blue-900">
+          <div>
+            <label className="text-sm text-slate-600 dark:text-slate-400 mb-2 block">
+              How Much to Bet?
+            </label>
+            <div className="flex space-x-2">
+              {[1, 2].map((amount) => (
+                <button
+                  key={amount}
+                  onClick={() => setBetAmount(amount as BetAmount)}
+                  className={`px-3 py-1 rounded text-sm ${
+                    betAmount === amount
+                      ? "bg-blue-600 text-white dark:bg-blue-700"
+                      : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+                  } ${isTrading ? "opacity-50 cursor-not-allowed" : ""}`}
+                  disabled={isTrading}
+                >
+                  ${amount}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Trading controls - simplified labels */}
-      <div className="grid grid-cols-2 gap-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-800">
-        <button
-          className={`bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded ${isTrading ? "opacity-50 cursor-not-allowed" : ""}`}
-          onClick={() => placeBet("buy")}
-          disabled={isTrading || balance < betAmount}
-        >
-          BET UP ↑
-        </button>
-        <button
-          className={`bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded ${isTrading ? "opacity-50 cursor-not-allowed" : ""}`}
-          onClick={() => placeBet("sell")}
-          disabled={isTrading || balance < betAmount}
-        >
-          BET DOWN ↓
-        </button>
-      </div>
+        {/* Trading buttons */}
+        <div className="grid grid-cols-2 gap-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-800">
+          <button
+            className={`bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded ${
+              isTrading ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+            onClick={() => placeBet("buy")}
+            disabled={isTrading || balance < betAmount}
+          >
+            BET UP ↑
+          </button>
+          <button
+            className={`bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded ${
+              isTrading ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+            onClick={() => placeBet("sell")}
+            disabled={isTrading || balance < betAmount}
+          >
+            BET DOWN ↓
+          </button>
+        </div>
 
-      {/* Stats footer - simplified explanations */}
-      <div className="grid grid-cols-4 gap-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-900 text-xs">
-        <div className="text-center">
-          <div className="text-blue-500 dark:text-blue-300">ROUND</div>
-          <div className="font-medium text-slate-800 dark:text-white">
-            {isTrading ? `${countDown}s left` : "Ready to bet!"}
+        {/* Stats footer */}
+        <div className="grid grid-cols-4 gap-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-900 text-xs">
+          <div className="text-center">
+            <div className="text-blue-500 dark:text-blue-300">ROUND</div>
+            <div className="font-medium text-slate-800 dark:text-white">
+              {isTrading ? `${countDown}s left` : "Ready to bet!"}
+            </div>
           </div>
-        </div>
-        <div className="text-center">
-          <div className="text-blue-500 dark:text-blue-300">WIN SHARE</div>
-          <div className="font-medium text-slate-800 dark:text-white">
-            92% of pool
+          <div className="text-center">
+            <div className="text-blue-500 dark:text-blue-300">WIN SHARE</div>
+            <div className="font-medium text-slate-800 dark:text-white">
+              92% of pool
+            </div>
           </div>
-        </div>
-        <div className="text-center">
-          <div className="text-blue-500 dark:text-blue-300">GAME FEE</div>
-          <div className="font-medium text-slate-800 dark:text-white">8%</div>
-        </div>
-        <div className="text-center">
-          <div className="text-blue-500 dark:text-blue-300">MY BET</div>
-          <div className="font-medium text-slate-800 dark:text-white">
-            ${betAmount}
+          <div className="text-center">
+            <div className="text-blue-500 dark:text-blue-300">GAME FEE</div>
+            <div className="font-medium text-slate-800 dark:text-white">8%</div>
+          </div>
+          <div className="text-center">
+            <div className="text-blue-500 dark:text-blue-300">MY BET</div>
+            <div className="font-medium text-slate-800 dark:text-white">
+              ${betAmount}
+            </div>
           </div>
         </div>
       </div>
