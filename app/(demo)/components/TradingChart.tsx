@@ -23,6 +23,13 @@ interface TradingChartProps {
   onPlayersChange?: (activePlayers: number) => void;
 }
 
+interface PlayerResult {
+  id: string;
+  hasWon: boolean;
+  betAmount: number;
+  payout: number;
+}
+
 export default function TradingChart({
   onTradeComplete,
   onPlayersChange,
@@ -572,12 +579,7 @@ export default function TradingChart({
   ): {
     isTie: boolean;
     winningPosition: BetPosition | null;
-    players: {
-      id: string;
-      hasWon: boolean;
-      betAmount: number;
-      payout: number;
-    }[];
+    players: PlayerResult[];
     houseFee: number;
   } => {
     // Calculate total bets for each side
@@ -707,7 +709,7 @@ export default function TradingChart({
       const userResult = sessionResult.winners.find(
         (p) => p.playerId === userPlayerId,
       );
-      const isWin = userResult?.hasWon;
+      const isWin = userResult !== undefined;
       ctx.fillStyle = isWin ? "#10b981" : "#ef4444";
       ctx.beginPath();
       ctx.arc(
