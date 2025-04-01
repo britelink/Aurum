@@ -400,7 +400,6 @@ const BirdRaceBetting = () => {
         {trajectoryPath.length > 1 &&
           trajectoryPath.map((pos, index) => {
             if (index === 0) return null; // Skip the first point
-            const prevPos = trajectoryPath[index - 1];
             const opacity = 0.3 + (index / trajectoryPath.length) * 0.7;
             return (
               <div
@@ -572,9 +571,9 @@ const BirdRaceBetting = () => {
           <div className="font-medium">🎮 Game Rules</div>
           <div className="text-xs mt-1">
             The bird is always flying! Bet whether it will go UP or DOWN in the
-            next 10 seconds. The bird's movement is influenced by betting - it
-            tends to fly opposite to the majority bet! Watch the trajectory path
-            to predict its next move. Winners share 92% of losing bets.
+            next 10 seconds. The bird&apos;s movement is influenced by betting -
+            it tends to fly opposite to the majority bet! Watch the trajectory
+            path to predict its next move. Winners share 92% of losing bets.
           </div>
         </div>
       </div>
