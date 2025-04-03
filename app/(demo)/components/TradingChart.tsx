@@ -143,12 +143,23 @@ export default function TradingChart({
             betImbalance === "buy" ? -1 : betImbalance === "sell" ? 1 : 0;
 
           // If equal bets, make very small random movements
-          const volatility =
+          let volatility =
             betImbalance === "equal"
               ? (Math.random() - 0.5) * 0.00005
               : 0.00008 + Math.random() * 0.00012;
 
+          // EDGE CASE FIX: Check if we're at or near boundaries and ensure continued movement
+          if (prev <= 1.0816 && moveDirection < 0) {
+            // If at lower bound and trying to go lower, force a slight upward movement
+            return prev + (0.0001 + Math.random() * 0.00008);
+          } else if (prev >= 1.0837 && moveDirection > 0) {
+            // If at upper bound and trying to go higher, force a slight downward movement
+            return prev - (0.0001 + Math.random() * 0.00008);
+          }
+
           const newPrice = prev + moveDirection * volatility;
+
+          // Still keep overall limits but with a small margin to prevent flatlines
           const boundedPrice = Math.max(1.0815, Math.min(1.0838, newPrice));
 
           // Update history
@@ -502,179 +513,6 @@ export default function TradingChart({
     setCountDown(sessionTime);
   };
 
-  // Function to end a trading session
-  const endSession = () => {
-    setIsTrading(false);
-
-    // Determine the winner based on price movement
-    const startPrice =
-      tradePath[0]?.price || activeTrade?.entryPrice || currentPrice;
-    const endPrice = currentPrice;
-    const priceWentUp = endPrice > startPrice;
-    const winningPosition: BetPosition = priceWentUp ? "buy" : "sell";
-
-    // Calculate winner distributions based on new logic
-    const result = calculatePrizeDistribution(sessionPlayers, winningPosition);
-
-    // Create a proper SessionResult object
-    const sessionResultObject: SessionResult = {
-      winningPosition: result.winningPosition,
-      players: sessionPlayers,
-      buyTotal: sessionPlayers
-        .filter((p) => p.position === "buy")
-        .reduce((sum, p) => sum + p.amount, 0),
-      sellTotal: sessionPlayers
-        .filter((p) => p.position === "sell")
-        .reduce((sum, p) => sum + p.amount, 0),
-      winners: result.players
-        .filter((p) => p.hasWon)
-        .map((p) => ({
-          playerId: p.id,
-          position:
-            sessionPlayers.find((sp) => sp.id === p.id)?.position || "buy",
-          profit: p.payout - p.betAmount,
-          initialBet: p.betAmount as BetAmount,
-          totalReturn: p.payout,
-          roi: ((p.payout - p.betAmount) / p.betAmount) * 100,
-        })),
-      losers: result.players
-        .filter((p) => !p.hasWon)
-        .map((p) => ({
-          playerId: p.id,
-          position:
-            sessionPlayers.find((sp) => sp.id === p.id)?.position || "sell",
-          profit: -p.betAmount,
-          initialBet: p.betAmount as BetAmount,
-          totalReturn: 0,
-          roi: -100,
-        })),
-      isFoul: false,
-      isNeutral: result.isTie,
-      timestamp: Date.now(),
-    };
-
-    setSessionResult(sessionResultObject);
-
-    // Find the user's result
-    const userResult = result.players.find(
-      (player) => player.id === userPlayerId,
-    );
-
-    if (userResult) {
-      // Update user's balance
-      setBalance((prev) => prev + userResult.payout);
-
-      // Create trade history entry
-      const tradeData = {
-        id: Date.now(),
-        position: activeTrade?.position || "unknown",
-        amount: activeTrade?.amount || 0,
-        entryPrice: activeTrade?.entryPrice || 0,
-        exitPrice: currentPrice,
-        profit: userResult.payout - (activeTrade?.amount || 0), // profit = payout - bet
-        time: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        isWin: userResult.hasWon,
-      };
-
-      // Notify parent component
-      if (onTradeComplete) {
-        onTradeComplete(tradeData);
-      }
-    }
-
-    // Reset for next session
-    setTimeout(() => {
-      setActiveTrade(null);
-      setTradePath([]);
-      setCountDown(0);
-      setSessionPlayers([]);
-      setSessionResult(null);
-    }, 5000);
-  };
-
-  // Calculate prize distribution based on the new logic
-  const calculatePrizeDistribution = (
-    players: Player[],
-    winningPosition: BetPosition,
-  ): {
-    isTie: boolean;
-    winningPosition: BetPosition | null;
-    players: PlayerResult[];
-    houseFee: number;
-  } => {
-    // Calculate total bets for each side
-    const upTotal = players
-      .filter((p) => p.position === "buy")
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    const downTotal = players
-      .filter((p) => p.position === "sell")
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    // If equal bets on both sides, it's a tie
-    if (upTotal === downTotal) {
-      return {
-        isTie: true,
-        winningPosition: null,
-        players: players.map((p) => ({
-          id: p.id,
-          hasWon: false,
-          betAmount: p.amount,
-          payout: p.amount, // return original bet
-        })),
-        houseFee: 0,
-      };
-    }
-
-    // Calculate winning and losing pools
-    const winningPlayers = players.filter(
-      (p) => p.position === winningPosition,
-    );
-    const losingPlayers = players.filter((p) => p.position !== winningPosition);
-
-    const winningPool = winningPlayers.reduce((sum, p) => sum + p.amount, 0);
-    const losingPool = losingPlayers.reduce((sum, p) => sum + p.amount, 0);
-
-    // Calculate house fee (8% of losing pool)
-    const houseFee = losingPool * 0.08;
-
-    // Calculate prize pool (92% of losing pool)
-    const prizePool = losingPool * 0.92;
-
-    // Calculate results for all players
-    const playerResults = players.map((player) => {
-      if (player.position === winningPosition) {
-        // Winners get their bet back plus a proportional share of the prize pool
-        const share = player.amount / winningPool;
-        const prize = prizePool * share;
-        return {
-          id: player.id,
-          hasWon: true,
-          betAmount: player.amount,
-          payout: player.amount + prize, // original bet + winnings
-        };
-      } else {
-        // Losers get nothing
-        return {
-          id: player.id,
-          hasWon: false,
-          betAmount: player.amount,
-          payout: 0,
-        };
-      }
-    });
-
-    return {
-      isTie: false,
-      winningPosition,
-      players: playerResults,
-      houseFee,
-    };
-  };
-
   // Add this function to show trade results visually
   const showTradeResult = () => {
     if (!chartRef.current || !sessionResult) return;
@@ -786,11 +624,150 @@ export default function TradingChart({
     }, 5000);
   };
 
-  // Update completeTrade function
+  // Correct completeTrade function
   const completeTrade = () => {
     if (!activeTrade) return;
-    endSession();
-    setTimeout(showTradeResult, 100);
+    setIsTrading(false);
+
+    // Determine the bet imbalance - which side has more bets
+    const finalBuyVotes = sessionPlayers
+      .filter((p) => p.position === "buy")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const finalSellVotes = sessionPlayers
+      .filter((p) => p.position === "sell")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    // The key principle: the side with FEWER bets should win
+    const winningPosition =
+      finalBuyVotes === finalSellVotes
+        ? "neutral" // Neutral if equal bets on both sides
+        : finalBuyVotes > finalSellVotes
+          ? "sell" // If more people bet UP, DOWN should win
+          : "buy"; // If more people bet DOWN, UP should win
+
+    // IMPORTANT: Force the final price movement to match the winning side
+    // This ensures the visual representation matches the actual winners
+    const finalPrice =
+      winningPosition === "neutral"
+        ? currentPrice
+        : winningPosition === "buy"
+          ? currentPrice + 0.0005 // Force line up if BUY wins
+          : currentPrice - 0.0005; // Force line down if SELL wins
+
+    setCurrentPrice(finalPrice);
+    setPriceHistory((prev) => [...prev.slice(0, -1), finalPrice]);
+
+    if (tradePath.length > 0) {
+      // Update the last point in trade path to reflect final direction
+      setTradePath((prev) => {
+        const updatedPath = [...prev];
+        if (updatedPath.length > 0) {
+          updatedPath[updatedPath.length - 1] = {
+            ...updatedPath[updatedPath.length - 1],
+            price: finalPrice,
+          };
+        }
+        return updatedPath;
+      });
+    }
+
+    // Calculate winners and losers
+    const winners = sessionPlayers.filter(
+      (player) =>
+        player.position === winningPosition || winningPosition === "neutral",
+    );
+    const losers = sessionPlayers.filter(
+      (player) =>
+        player.position !== winningPosition && winningPosition !== "neutral",
+    );
+
+    // Calculate total losing bet amount
+    const losingTotal = losers.reduce((sum, loser) => sum + loser.amount, 0);
+    const winningTotal = winners.reduce(
+      (sum, winner) => sum + winner.amount,
+      0,
+    );
+
+    // Distribute the pot
+    const houseFee = losingTotal * 0.08; // 8% house fee
+    const winnersPot = losingTotal - houseFee;
+
+    // Calculate each winner's share
+    const winnersWithProfits = winners.map((winner) => {
+      const profitShare =
+        winningPosition === "neutral"
+          ? 0 // No profit in case of a neutral result
+          : (winner.amount / winningTotal) * winnersPot;
+
+      return {
+        playerId: winner.id, // Important: match the property name used in showTradeResult
+        ...winner,
+        profit: profitShare,
+      };
+    });
+
+    // Generate session result
+    const result: SessionResult = {
+      winners: winnersWithProfits,
+      losers: losers.map((loser) => ({
+        ...loser,
+        initialBet: loser.amount,
+      })),
+      winningPosition: winningPosition as BetPosition,
+      isNeutral: winningPosition === "neutral",
+      houseProfit: houseFee,
+    };
+
+    // Update balance based on result
+    const userWon = result.winners.some((w) => w.playerId === userPlayerId);
+    if (userWon && !result.isNeutral) {
+      const userWinAmount =
+        result.winners.find((w) => w.playerId === userPlayerId)?.profit || 0;
+      // Add original bet amount back plus profit
+      setBalance((prev) => prev + activeTrade.amount + userWinAmount);
+    } else if (result.isNeutral) {
+      // Return original bet in case of a tie
+      setBalance((prev) => prev + activeTrade.amount);
+    }
+
+    // Record trade history with final price
+    const startPrice =
+      tradePath.length > 0 ? tradePath[0].price : activeTrade.entryPrice;
+    const endPrice = finalPrice; // Use our forced final price
+
+    // Send trade data to parent component if callback exists
+    if (onTradeComplete) {
+      onTradeComplete({
+        id: activeTrade.id,
+        position: activeTrade.position,
+        amount: activeTrade.amount,
+        entryPrice: activeTrade.entryPrice,
+        exitPrice: endPrice,
+        profit: userWon
+          ? winnersWithProfits.find((w) => w.playerId === userPlayerId)
+              ?.profit || 0
+          : -activeTrade.amount,
+        time: new Date().toLocaleTimeString(),
+        isWin: userWon && !result.isNeutral,
+      });
+    }
+
+    // Set session result for display
+    setSessionResult(result);
+
+    // Show visual result
+    setTimeout(() => {
+      showTradeResult();
+    }, 100);
+
+    // Clear for next round
+    setTimeout(() => {
+      setActiveTrade(null);
+      setSessionPlayers([]);
+      setSessionResult(null);
+      setTradePath([]);
+    }, 5000);
   };
 
   // Calculate time remaining for active trade
