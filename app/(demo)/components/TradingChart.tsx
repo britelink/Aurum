@@ -693,10 +693,18 @@ export default function TradingChart({
           ? 0 // No profit in case of a neutral result
           : (winner.amount / winningTotal) * winnersPot;
 
+      const totalReturn = winner.amount + profitShare;
+      const roi = profitShare > 0 ? (profitShare / winner.amount) * 100 : 0;
+
       return {
-        playerId: winner.id, // Important: match the property name used in showTradeResult
-        ...winner,
+        playerId: winner.id,
+        id: winner.id,
+        position: winner.position,
+        amount: winner.amount,
+        initialBet: winner.amount, // Required field
         profit: profitShare,
+        totalReturn: totalReturn, // Required field
+        roi: roi, // Required field (Return on Investment percentage)
       };
     });
 
@@ -705,7 +713,10 @@ export default function TradingChart({
       winners: winnersWithProfits,
       losers: losers.map((loser) => ({
         ...loser,
+        playerId: loser.id,
         initialBet: loser.amount,
+        totalReturn: 0,
+        roi: -100, // Lost everything, so ROI is -100%
       })),
       winningPosition: winningPosition as BetPosition,
       isNeutral: winningPosition === "neutral",
