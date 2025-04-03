@@ -717,10 +717,10 @@ export default function TradingChart({
         initialBet: loser.amount,
         totalReturn: 0,
         roi: -100, // Lost everything, so ROI is -100%
+        profit: 0, // Add missing profit property required by PlayerResult type
       })),
       winningPosition: winningPosition as BetPosition,
       isNeutral: winningPosition === "neutral",
-      houseProfit: houseFee,
     };
 
     // Update balance based on result
