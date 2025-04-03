@@ -721,6 +721,11 @@ export default function TradingChart({
       })),
       winningPosition: winningPosition as BetPosition,
       isNeutral: winningPosition === "neutral",
+      players: sessionPlayers,
+      buyTotal: finalBuyVotes,
+      sellTotal: finalSellVotes,
+      isFoul: false,
+      timestamp: Date.now(),
     };
 
     // Update balance based on result
