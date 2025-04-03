@@ -23,13 +23,6 @@ interface TradingChartProps {
   onPlayersChange?: (activePlayers: number) => void;
 }
 
-interface PlayerResult {
-  id: string;
-  hasWon: boolean;
-  betAmount: number;
-  payout: number;
-}
-
 export default function TradingChart({
   onTradeComplete,
   onPlayersChange,
@@ -143,7 +136,7 @@ export default function TradingChart({
             betImbalance === "buy" ? -1 : betImbalance === "sell" ? 1 : 0;
 
           // If equal bets, make very small random movements
-          let volatility =
+          const volatility =
             betImbalance === "equal"
               ? (Math.random() - 0.5) * 0.00005
               : 0.00008 + Math.random() * 0.00012;
@@ -731,9 +724,6 @@ export default function TradingChart({
       setBalance((prev) => prev + activeTrade.amount);
     }
 
-    // Record trade history with final price
-    const startPrice =
-      tradePath.length > 0 ? tradePath[0].price : activeTrade.entryPrice;
     const endPrice = finalPrice; // Use our forced final price
 
     // Send trade data to parent component if callback exists
