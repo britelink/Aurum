@@ -388,7 +388,7 @@ export default function About() {
             Join the Penny Game Community
           </h2>
           <p className="text-lg text-blue-700 dark:text-blue-200 mb-8 max-w-2xl mx-auto">
-            Start betting now and experience the next generation of online
+            Start playing now and experience the next generation of online
             betting with Penny Game.
           </p>
 

@@ -918,32 +918,32 @@ export default function TradingChart({
           </div>
         )}
 
-        {/* Simplified Session info overlay */}
+        {/* Simplified Session info overlay
         <div className="absolute top-4 left-4 bg-slate-800/90 text-white px-3 py-2 rounded text-xs">
           <div className="font-bold mb-1">Current Round</div>
           <div>
-            UP Bets: $
+            UP Predictions: $
             {sessionPlayers
               .filter((p) => p.position === "buy")
               .reduce((sum, p) => sum + p.amount, 0)}
           </div>
           <div>
-            DOWN Bets: $
+            DOWN Predictions: $
             {sessionPlayers
               .filter((p) => p.position === "sell")
               .reduce((sum, p) => sum + p.amount, 0)}
           </div>
           <div>Players: {sessionPlayers.length}</div>
           {isTrading && <div className="mt-1">Ends in: {countDown}s</div>}
-        </div>
+        </div> */}
 
-        {/* Bet direction prediction */}
+        {/* Bet direction prediction 
         {isTrading && betImbalance !== "equal" && (
           <div className="absolute bottom-4 right-4 bg-slate-800/80 text-white px-3 py-1 rounded text-xs">
             Prediction: Line will go {betImbalance === "buy" ? "DOWN" : "UP"}
             <span className="ml-1 opacity-75">(opposite of majority)</span>
           </div>
-        )}
+        )}*/}
 
         {/* Simplified Session result overlay */}
         {sessionResult && (
@@ -976,8 +976,8 @@ export default function TradingChart({
                   ) : (
                     <div className="mt-3 text-red-500 font-bold text-lg">
                       {sessionResult.isNeutral
-                        ? "You got your bet back."
-                        : "You lost your bet."}
+                        ? "You got your capital back."
+                        : "You lost your capital."}
                     </div>
                   )}
                 </div>
@@ -985,17 +985,7 @@ export default function TradingChart({
               <div className="text-sm mb-1">
                 {sessionResult.isNeutral
                   ? "Everyone gets their money back!"
-                  : "Winners share 92% of losing bets."}
-              </div>
-              <div className="text-xs text-slate-500 mt-2">
-                House fee: $
-                {(
-                  sessionResult.losers.reduce(
-                    (sum, loser) => sum + loser.initialBet,
-                    0,
-                  ) * 0.08
-                ).toFixed(2)}{" "}
-                (8%)
+                  : "Winners share 92% of losing capital."}
               </div>
             </div>
           </div>
@@ -1020,7 +1010,7 @@ export default function TradingChart({
         <div className="p-3 border-t border-slate-200 dark:border-blue-900">
           <div>
             <label className="text-sm text-slate-600 dark:text-slate-400 mb-2 block">
-              How Much to Bet?
+              How Much to Play?
             </label>
             <div className="flex space-x-2">
               {[1, 2].map((amount) => (
@@ -1071,16 +1061,7 @@ export default function TradingChart({
               {isTrading ? `${countDown}s left` : "Ready to bet!"}
             </div>
           </div>
-          <div className="text-center">
-            <div className="text-blue-500 dark:text-blue-300">WIN SHARE</div>
-            <div className="font-medium text-slate-800 dark:text-white">
-              92% of pool
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-blue-500 dark:text-blue-300">GAME FEE</div>
-            <div className="font-medium text-slate-800 dark:text-white">8%</div>
-          </div>
+
           <div className="text-center">
             <div className="text-blue-500 dark:text-blue-300">MY BET</div>
             <div className="font-medium text-slate-800 dark:text-white">

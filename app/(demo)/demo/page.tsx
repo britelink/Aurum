@@ -114,10 +114,10 @@ export default function TradingDemoPage() {
               It&apos;s super simple:
             </p>
             <ol className="list-decimal pl-5 text-slate-600 dark:text-slate-400 space-y-1">
-              <li>Bet $1 or $2</li>
+              <li>Play $1 or $2</li>
               <li>Guess if the line will go UP or DOWN</li>
               <li>Win 80% more if you&apos;re right!</li>
-              <li>Lose your bet if you&apos;re wrong</li>
+              <li>Lose your capital if you&apos;re wrong</li>
             </ol>
             <p className="mt-3 text-slate-700 dark:text-slate-300">
               You start with $1000 play money. Have fun!
@@ -140,7 +140,7 @@ export default function TradingDemoPage() {
             <div className="bg-white dark:bg-gray-900 border border-slate-200 dark:border-blue-900 rounded-xl overflow-hidden shadow-lg">
               <div className="bg-slate-50 dark:bg-gray-800 border-b border-slate-200 dark:border-blue-900 p-3">
                 <h2 className="font-bold text-slate-800 dark:text-white">
-                  Your Bets
+                  Your Predictions
                 </h2>
               </div>
               <div className="p-3">
@@ -161,7 +161,7 @@ export default function TradingDemoPage() {
                       <path d="M18 12h-2" />
                       <path d="M15 9l3 3-3 3" />
                     </svg>
-                    <p>No bets yet</p>
+                    <p>No predictions yet</p>
                     <p>Make your first prediction!</p>
                   </div>
                 ) : (
@@ -208,7 +208,7 @@ export default function TradingDemoPage() {
                     ))}
                     <div className="mt-2 text-right">
                       <button className="text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400">
-                        View all bets
+                        View all predictions
                       </button>
                     </div>
                   </div>
@@ -226,7 +226,7 @@ export default function TradingDemoPage() {
               <div className="p-4 space-y-3 text-sm text-slate-600 dark:text-slate-400">
                 <p>
                   <span className="text-blue-500 dark:text-blue-400">👉</span>
-                  Start with $1 bets until you get the hang of it.
+                  Start with $1 predictions until you get the hang of it.
                 </p>
                 <p>
                   <span className="text-emerald-500 dark:text-emerald-400">
@@ -236,7 +236,7 @@ export default function TradingDemoPage() {
                 </p>
                 <p>
                   <span className="text-amber-500 dark:text-amber-400">👉</span>
-                  Don&apos;t bet bigger after losing - stay consistent.
+                  After losing - stay consistent.
                 </p>
                 <p>
                   <span className="text-purple-500 dark:text-purple-400">

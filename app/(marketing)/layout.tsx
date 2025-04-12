@@ -5,9 +5,9 @@ import Header from "./components/Header";
 import Footer from "./components/Footer";
 
 export const metadata: Metadata = {
-  title: "Penny Game | Next Generation Betting Platform",
+  title: "Penny Game | Next Generation Gaming Platform",
   description:
-    "Penny Game is an online betting platform that allows users to predict price index movements with high returns on investment.",
+    "Penny Game is an online gaming platform that allows users to predict price index movements with high returns on investment.",
 };
 
 export default function RootLayout({

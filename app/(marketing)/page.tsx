@@ -9,8 +9,8 @@ export default function Home() {
   return (
     <>
       <Hero
-        title="Predict. Bet. Win."
-        subtitle="Penny Game offers a new way to predict market movements with fixed-price bets and high returns on investment."
+        title="Predict. Play. Win."
+        subtitle="Penny Game offers a new way to predict market movements with fixed-price lots and high returns on investment."
         secondaryCta="Demo Account"
         showChart={false}
       />
@@ -22,7 +22,7 @@ export default function Home() {
               How Penny Game Works
             </h2>
             <p className="text-lg text-blue-700 dark:text-blue-300 max-w-3xl mx-auto">
-              Penny Game is an online betting platform that allows users to
+              Penny Game is an online gaming platform that allows users to
               predict market movements in a simple, fast, and rewarding way.
             </p>
           </div>
@@ -35,14 +35,14 @@ export default function Home() {
               className="bg-white dark:bg-slate-900/90 shadow-md hover:shadow-lg"
             />
             <InfoCard
-              title="Fixed Price Bets"
-              description="Place bets in fixed lots of $1 and $2, making it easy to manage your trading strategy and bankroll."
+              title="Fixed Price Lots"
+              description="Predict the direction of the price index in fixed lots of $1 and $2, making it easy to manage your trading strategy and bankroll."
               icon={<DollarSign size={32} />}
               className="bg-white dark:bg-slate-900/90 shadow-md hover:shadow-lg"
             />
             <InfoCard
-              title="High ROI Potential"
-              description="Win between 90% to over 100% returns on your initial bet with each successful prediction."
+              title="High Returns"
+              description="Win between 90% to over 100% returns on your initial capital with each successful prediction."
               icon={<TrendingUp size={32} />}
               className="bg-white dark:bg-slate-900/90 shadow-md hover:shadow-lg"
             />
@@ -70,7 +70,7 @@ export default function Home() {
                     className="text-emerald-500 dark:text-emerald-400 mt-1 mr-2 flex-shrink-0"
                   />
                   <span className="text-slate-600 dark:text-slate-300">
-                    Place a bet on the direction of the price movement
+                    Predict the direction of the price index
                   </span>
                 </li>
                 <li className="flex items-start">
@@ -106,7 +106,7 @@ export default function Home() {
       <section className="py-16 px-6 bg-blue-900 dark:bg-blue-950 text-white">
         <div className="max-w-7xl mx-auto text-center">
           <h2 className="text-3xl font-serif font-bold mb-4 text-blue-100">
-            Ready to Start Betting?
+            Ready to Start Playing?
           </h2>
           <p className="text-lg text-blue-200 mb-8 max-w-2xl mx-auto">
             Join thousands of traders who are already experiencing the Penny
@@ -149,10 +149,10 @@ export default function Home() {
 
             <div className="bg-white dark:bg-blue-900/30 p-6 rounded-lg shadow-md">
               <h3 className="text-xl font-medium mb-2 text-blue-700 dark:text-blue-200">
-                What is the minimum bet?
+                What is the minimum lot?
               </h3>
               <p className="text-slate-600 dark:text-slate-300">
-                Penny Game offers fixed bet lots of $1 and $2 only, making it
+                Penny Game offers fixed lot sizes of $1 and $2 only, making it
                 easy to manage your trading strategy and risk.
               </p>
             </div>
@@ -173,7 +173,7 @@ export default function Home() {
               </h3>
               <p className="text-slate-600 dark:text-slate-300">
                 Winning predictions can yield returns ranging from 90% up to
-                more than 100% of your initial bet, depending on the
+                more than 100% of your initial capital, depending on the
                 session&apos;s distribution.
               </p>
             </div>

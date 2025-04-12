@@ -22,7 +22,7 @@ export default function Footer() {
               </span>
             </Link>
             <p className="text-blue-200 dark:text-blue-300 mb-4">
-              Next generation betting platform with high returns and fast-paced
+              Next generation gaming platform with high returns and fast-paced
               sessions.
             </p>
             <div className="flex space-x-3">

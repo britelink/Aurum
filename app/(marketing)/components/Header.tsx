@@ -131,7 +131,7 @@ export default function Header() {
                 href="/signin"
                 className="hidden md:flex items-center gap-2 px-4 py-1.5 text-sm bg-gradient-to-r from-amber-400 to-amber-500 text-blue-900 font-medium rounded hover:from-amber-500 hover:to-amber-600 transition-all"
               >
-                Start Betting
+                Start Playing
               </Link>
             </>
           )}
@@ -192,7 +192,7 @@ export default function Header() {
               href="/trade"
               className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-blue-900 font-medium rounded-md py-2 px-4 text-center hover:from-amber-500 hover:to-amber-600 transition-all"
             >
-              Start Betting
+              Start Playing
             </Link>
 
             <SignOutButton

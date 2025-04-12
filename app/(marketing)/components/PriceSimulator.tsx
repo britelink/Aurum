@@ -275,13 +275,13 @@ export default function PriceSimulator() {
       {/* Bet amount selection */}
       <div className="mb-3">
         <div className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
-          How much to bet?
+          How much to play?
         </div>
         <div className="flex space-x-2">
-          {[1, 2, 5, 10, 25, 50].map((amount) => (
+          {[1, 2].map((amount) => (
             <button
               key={amount}
-              onClick={() => setBetAmount(amount as 1 | 2 | 5 | 10 | 25 | 50)}
+              onClick={() => setBetAmount(amount as 1 | 2)}
               className={`px-3 py-1.5 rounded-md text-sm ${
                 betAmount === amount
                   ? "bg-blue-600 text-white"
@@ -306,7 +306,7 @@ export default function PriceSimulator() {
               : "bg-emerald-500 hover:bg-emerald-600 text-white"
           } ${(!isActive || selectedBet !== null) && selectedBet !== "up" ? "opacity-50 cursor-not-allowed" : ""}`}
         >
-          BET UP ↑
+          UP ↑
         </button>
         <button
           onClick={() => handlePlaceBet("down")}
@@ -317,7 +317,7 @@ export default function PriceSimulator() {
               : "bg-red-500 hover:bg-red-600 text-white"
           } ${(!isActive || selectedBet !== null) && selectedBet !== "down" ? "opacity-50 cursor-not-allowed" : ""}`}
         >
-          BET DOWN ↓
+          DOWN ↓
         </button>
       </div>
 
