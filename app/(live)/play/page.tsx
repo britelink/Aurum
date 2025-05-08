@@ -24,48 +24,29 @@ export default function PlayPage() {
     try {
       setIsDepositing(true);
 
-      // Initialize payment form data
-      const formData = new FormData();
-      formData.append(
-        "Lite_Merchant_ApplicationId",
-        "EC4C46B2-F20C-4F9F-8244-87AC153EEEE8",
-      );
-      formData.append("Lite_Order_Amount", (depositAmount * 100).toString());
-      formData.append(
-        "Lite_Website_Successful_Url",
-        `${window.location.origin}/api/payment/success`,
-      );
-      formData.append(
-        "Lite_Website_Fail_Url",
-        `${window.location.origin}/api/payment/fail`,
-      );
-      formData.append(
-        "Lite_Website_TryLater_Url",
-        `${window.location.origin}/api/payment/retry`,
-      );
-      formData.append(
-        "Lite_Website_Error_Url",
-        `${window.location.origin}/api/payment/error`,
-      );
-      formData.append("Ecom_BillTo_Online_Email", user?.email || "");
+      // First, create a payment session through your backend
+      const response = await fetch("/api/payment/create-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: depositAmount,
+          email: user?.email,
+        }),
+      });
 
-      // Create form and submit
-      const form = document.createElement("form");
-      form.method = "POST";
-      form.action = "https://backoffice.iveri.co.zw/lite";
-
-      for (const [key, value] of formData.entries()) {
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = key;
-        input.value = value.toString();
-        form.appendChild(input);
+      if (!response.ok) {
+        throw new Error("Failed to create payment session");
       }
 
-      document.body.appendChild(form);
-      form.submit();
+      const { redirectUrl } = await response.json();
+
+      // Redirect to the payment page
+      window.location.href = redirectUrl;
     } catch (error) {
       console.error("Deposit failed:", error);
+      // You might want to show an error message to the user
     } finally {
       setIsDepositing(false);
     }
