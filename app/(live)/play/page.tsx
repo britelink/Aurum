@@ -12,20 +12,13 @@ import {
 } from "@/components/ui/dialog";
 
 export default function PlayPage() {
-  const { isAuthenticated, isLoading } = useConvexAuth();
+  const { isLoading } = useConvexAuth();
   const user = useQuery(api.aurum.getCurrentUser);
   const depositFunds = useMutation(api.aurum.depositFunds);
 
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [depositAmount, setDepositAmount] = useState<number>(10);
   const [isDepositing, setIsDepositing] = useState(false);
-
-  // If not authenticated, redirect to sign in
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      window.location.href = "/signin";
-    }
-  }, [isLoading, isAuthenticated]);
 
   const handleDeposit = async () => {
     try {
