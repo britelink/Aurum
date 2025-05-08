@@ -277,10 +277,10 @@ export default function MarketChart() {
       {/* Trading controls - simplified */}
       <div className="grid grid-cols-2 gap-2 p-3 border-t border-slate-200 dark:border-blue-900 bg-slate-50 dark:bg-gray-800">
         <button className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded">
-          BET UP ↑
+          PREDICT UP ↑
         </button>
         <button className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded">
-          BET DOWN ↓
+          PREDICT DOWN ↓
         </button>
       </div>
 
