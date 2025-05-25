@@ -33,7 +33,6 @@ export default function DepositModal({
   onOpenChange,
   userId,
   email,
-  onComplete,
 }: DepositModalProps) {
   const [depositAmount, setDepositAmount] = useState<number>(10);
   const [isDepositing, setIsDepositing] = useState(false);
@@ -98,7 +97,7 @@ export default function DepositModal({
         throw new Error("Failed to create payment session");
       }
 
-      const { checkoutId, paymentBrand } = await response.json();
+      const { checkoutId } = await response.json();
       setCheckoutId(checkoutId);
       setCurrentStep(2);
 
@@ -117,20 +116,6 @@ export default function DepositModal({
     } finally {
       setIsDepositing(false);
     }
-  };
-
-  const handleClose = () => {
-    // Clean up payment widget script when closing
-    const paymentScript = document.querySelector(
-      'script[src*="paymentWidgets.js"]',
-    );
-    if (paymentScript) {
-      paymentScript.remove();
-    }
-
-    setCurrentStep(1);
-    setCheckoutId(null);
-    onOpenChange(false);
   };
 
   return (

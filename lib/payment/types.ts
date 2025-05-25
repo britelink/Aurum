@@ -36,7 +36,7 @@ export interface CheckoutResponse {
 export interface PaymentStatusResponse {
   success: boolean;
   pending?: boolean;
-  data?: any;
+  data?: unknown;
   error?: string;
   reason?: string;
 }
