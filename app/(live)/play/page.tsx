@@ -4,56 +4,34 @@ import { useConvexAuth } from "convex/react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import TradingChart from "@/app/(demo)/components/TradingChart";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import DepositModal from "@/components/DepositModal";
+import { toast } from "react-hot-toast";
 
 export default function PlayPage() {
-  const { isLoading } = useConvexAuth();
+  const { isLoading, isAuthenticated } = useConvexAuth();
   const user = useQuery(api.aurum.getCurrentUser);
   const depositFunds = useMutation(api.aurum.depositFunds);
 
   const [showDepositModal, setShowDepositModal] = useState(false);
-  const [depositAmount, setDepositAmount] = useState<number>(10);
-  const [isDepositing, setIsDepositing] = useState(false);
 
-  const handleDeposit = async () => {
-    try {
-      setIsDepositing(true);
-
-      // First, create a payment session through your backend
-      const response = await fetch("/api/payment/create-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          amount: depositAmount,
-          email: user?.email,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to create payment session");
-      }
-
-      const { redirectUrl } = await response.json();
-
-      // Redirect to the payment page
-      window.location.href = redirectUrl;
-    } catch (error) {
-      console.error("Deposit failed:", error);
-      // You might want to show an error message to the user
-    } finally {
-      setIsDepositing(false);
+  const handleDepositComplete = async (success: boolean, amount?: number) => {
+    if (success && amount) {
+      toast.success(`Successfully deposited $${amount.toFixed(2)}`);
+      // The balance will be updated through the API route
     }
+    setShowDepositModal(false);
   };
 
-  if (isLoading || !user) {
+  if (isLoading) {
     return <div>Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return <div>Please sign in to play</div>;
+  }
+
+  if (!user) {
+    return <div>Loading user data...</div>;
   }
 
   return (
@@ -64,8 +42,16 @@ export default function PlayPage() {
             <h1 className="text-xl font-bold text-slate-800 dark:text-white">
               Penny Game Live
             </h1>
-            <div className="text-slate-600 dark:text-slate-400">
-              Balance: ${user.balance?.toFixed(2) || "0.00"}
+            <div className="flex items-center space-x-4">
+              <div className="text-slate-600 dark:text-slate-400">
+                Balance: ${user.balance?.toFixed(2) || "0.00"}
+              </div>
+              <button
+                onClick={() => setShowDepositModal(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm"
+              >
+                Deposit
+              </button>
             </div>
           </div>
         </div>
@@ -90,7 +76,6 @@ export default function PlayPage() {
         ) : (
           <TradingChart
             onTradeComplete={(data) => {
-              // Handle real money trade completion
               console.log("Trade completed:", data);
             }}
             onPlayersChange={() => {}}
@@ -98,35 +83,13 @@ export default function PlayPage() {
         )}
       </main>
 
-      {/* Deposit Modal */}
-      <Dialog open={showDepositModal} onOpenChange={setShowDepositModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Deposit Funds</DialogTitle>
-          </DialogHeader>
-          <div className="p-4">
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Amount to Deposit
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(Number(e.target.value))}
-                className="w-full p-2 border rounded-md"
-              />
-            </div>
-            <button
-              onClick={handleDeposit}
-              disabled={isDepositing || depositAmount < 1}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md disabled:opacity-50"
-            >
-              {isDepositing ? "Processing..." : "Deposit"}
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <DepositModal
+        open={showDepositModal}
+        onOpenChange={setShowDepositModal}
+        userId={user._id}
+        email={user.email}
+        onComplete={handleDepositComplete}
+      />
     </div>
   );
 }
