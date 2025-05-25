@@ -1,4 +1,3 @@
-// app/api/payment/result/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { PaymentService } from "@/lib/payment/service";
 import { api } from "@/convex/_generated/api";
@@ -25,7 +24,10 @@ export async function POST(req: NextRequest) {
 
     if (statusResponse.success) {
       // Extract transaction data
-      const data = statusResponse.data;
+      const data = statusResponse.data as {
+        merchantTransactionId: string;
+        amount: string;
+      };
       const merchantTransactionId = data.merchantTransactionId;
       const amount = parseFloat(data.amount);
 
