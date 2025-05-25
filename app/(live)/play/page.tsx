@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useConvexAuth } from "convex/react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import TradingChart from "@/app/(demo)/components/TradingChart";
 import DepositModal from "@/components/DepositModal";
@@ -10,7 +10,6 @@ import { toast } from "react-hot-toast";
 export default function PlayPage() {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const user = useQuery(api.aurum.getCurrentUser);
-  const depositFunds = useMutation(api.aurum.depositFunds);
 
   const [showDepositModal, setShowDepositModal] = useState(false);
 
