@@ -154,7 +154,7 @@ export default function Footer() {
                   className="text-amber-400 dark:text-amber-300 mt-0.5 mr-2 flex-shrink-0"
                 />
                 <span className="text-blue-300 dark:text-blue-300">
-                  123 Finance Street, Trading District, NY 10001
+                  Bard House, 69 Samora Machel Avenue, Harare, Zimbabwe
                 </span>
               </li>
               <li className="flex items-center">
@@ -163,7 +163,7 @@ export default function Footer() {
                   className="text-amber-400 dark:text-amber-300 mr-2 flex-shrink-0"
                 />
                 <span className="text-blue-300 dark:text-blue-300">
-                  +1 (555) 123-4567
+                  263 78 570 8874
                 </span>
               </li>
               <li className="flex items-center">
@@ -172,21 +172,11 @@ export default function Footer() {
                   className="text-amber-400 dark:text-amber-300 mr-2 flex-shrink-0"
                 />
                 <span className="text-blue-300 dark:text-blue-300">
-                  support@aurumcapital.com
+                  pennygameinfo@gmail.com
                 </span>
               </li>
             </ul>
           </div>
-        </div>
-
-        <div className="mt-12 pt-8 border-t border-blue-800 dark:border-slate-800 text-center text-blue-400 dark:text-blue-400 text-sm">
-          <p>
-            © {new Date().getFullYear()} Aurum Capital. All rights reserved.
-          </p>
-          <p className="mt-2">
-            Trading involves risk. Past performance is not indicative of future
-            results.
-          </p>
         </div>
       </div>
     </footer>

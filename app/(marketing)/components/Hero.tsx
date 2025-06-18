@@ -46,7 +46,7 @@ export default function Hero({
             <p className="text-xl text-blue-100 mb-8">{subtitle}</p>
 
             <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
-              <Link href="/demo">
+              <Link href="/play">
                 <AurumButton
                   variant="primary"
                   size="lg"
