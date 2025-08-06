@@ -46,8 +46,8 @@ export default function PaymentFailurePage() {
 
           <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg mb-6">
             <p className="text-sm text-red-700 dark:text-red-200">
-              Don't worry, your account has not been charged. Please try again
-              or contact support if the problem persists.
+              Don&apos;t worry, your account has not been charged. Please try
+              again or contact support if the problem persists.
             </p>
           </div>
 

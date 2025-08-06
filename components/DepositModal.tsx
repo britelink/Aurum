@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, DollarSign, CreditCard, X } from "lucide-react";
+import { Loader2, DollarSign, X } from "lucide-react";
 import { Currency, PaymentMethod } from "@/lib/payment/types";
 import { toast } from "react-hot-toast";
 
@@ -33,7 +33,6 @@ export default function DepositModal({
   onOpenChange,
   userId,
   email,
-  onComplete,
 }: DepositModalProps) {
   const [depositAmount, setDepositAmount] = useState<number>(10);
   const [isDepositing, setIsDepositing] = useState(false);

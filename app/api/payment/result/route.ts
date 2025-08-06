@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Format: userId-timestamp
-      const userId = merchantTransactionId.split("-")[0];
+      // const userId = merchantTransactionId.split("-")[0]; // Not needed as we use auth context
 
       // Update user balance in Convex
       await convex.mutation(api.aurum.depositFunds, {
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       });
 
       // Redirect to success page with amount
-      const successUrl = `/api/payment/success?amount=${amount}`;
+      const successUrl = `/payment/success?amount=${amount}`;
       return NextResponse.redirect(new URL(successUrl, req.url));
     } else if (statusResponse.pending) {
       return NextResponse.json({
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     } else {
       // Redirect to failure page
       const errorMessage = statusResponse.error || "Payment failed";
-      const failureUrl = `/api/payment/failure?error=${encodeURIComponent(errorMessage)}`;
+      const failureUrl = `/payment/failure?error=${encodeURIComponent(errorMessage)}`;
       return NextResponse.redirect(new URL(failureUrl, req.url));
     }
   } catch (error) {
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
-    const failureUrl = `/api/payment/failure?error=${encodeURIComponent(errorMessage)}`;
+    const failureUrl = `/payment/failure?error=${encodeURIComponent(errorMessage)}`;
     return NextResponse.redirect(new URL(failureUrl, req.url));
   }
 }
