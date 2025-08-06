@@ -1,11 +1,11 @@
 // components/DepositModal.tsx
 import React, { useState } from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, DollarSign, CreditCard } from "lucide-react";
+import { Loader2, DollarSign, CreditCard, X } from "lucide-react";
 import { Currency, PaymentMethod } from "@/lib/payment/types";
 import { toast } from "react-hot-toast";
 
@@ -33,6 +33,7 @@ export default function DepositModal({
   onOpenChange,
   userId,
   email,
+  onComplete,
 }: DepositModalProps) {
   const [depositAmount, setDepositAmount] = useState<number>(10);
   const [isDepositing, setIsDepositing] = useState(false);
@@ -41,34 +42,49 @@ export default function DepositModal({
   const [checkoutId, setCheckoutId] = useState<string | null>(null);
 
   // Payment methods with icons and descriptions
-  // ... existing code ...
   const paymentMethods = [
     {
-      id: "card-usd",
+      id: "card-usd" as PaymentMethod,
       label: "Credit/Debit Card (USD)",
-      description: "International cards accepted",
-      icon: "/logos/payments/vm.png",
+      description: "VISA, Mastercard - International cards accepted",
+      icon: "💳",
       currency: "USD",
       paymentBrand: "VISA MASTER",
     },
     {
-      id: "zimswitch-usd",
+      id: "zimswitch-usd" as PaymentMethod,
       label: "Zimswitch (USD)",
-      description: "Local bank cards",
-      icon: "/logos/payments/zs.jpeg",
+      description: "Local Zimbabwe bank cards in USD",
+      icon: "🏦",
       currency: "USD",
       paymentBrand: "PRIVATE_LABEL",
     },
     {
-      id: "ecocash-usd",
+      id: "zimswitch-zwg" as PaymentMethod,
+      label: "Zimswitch (ZWG)",
+      description: "Local Zimbabwe bank cards in ZWG",
+      icon: "🏦",
+      currency: "ZWG",
+      paymentBrand: "PRIVATE_LABEL",
+    },
+    {
+      id: "ecocash-usd" as PaymentMethod,
       label: "EcoCash (USD)",
-      description: "Mobile money payment",
-      icon: "/logos/payments/ec.webp",
+      description: "Mobile money payment in USD",
+      icon: "📱",
       currency: "USD",
       paymentBrand: "ECOCASH",
     },
+    {
+      id: "ecocash-zwg" as PaymentMethod,
+      label: "EcoCash (ZWG)",
+      description: "Mobile money payment in ZWG",
+      icon: "📱",
+      currency: "ZWG",
+      paymentBrand: "ECOCASH",
+    },
   ];
-  // ... existing code ...
+
   const selectedPaymentMethod = paymentMethods.find(
     (m) => m.id === paymentMethod,
   );
@@ -118,15 +134,29 @@ export default function DepositModal({
     }
   };
 
+  const handleClose = () => {
+    setCurrentStep(1);
+    setCheckoutId(null);
+    onOpenChange(false);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Deposit Funds</DialogTitle>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={handleClose}>
+      <SheetContent className="w-full sm:max-w-md">
+        <SheetHeader className="flex flex-row items-center justify-between">
+          <SheetTitle>Deposit Funds</SheetTitle>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleClose}
+            className="h-6 w-6"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </SheetHeader>
 
         {currentStep === 1 && (
-          <div className="space-y-4 py-4">
+          <div className="space-y-6 py-6">
             <div className="space-y-2">
               <Label htmlFor="amount">Amount to Deposit</Label>
               <div className="relative">
@@ -138,8 +168,10 @@ export default function DepositModal({
                   value={depositAmount}
                   onChange={(e) => setDepositAmount(Number(e.target.value))}
                   className="pl-10"
+                  placeholder="Enter amount"
                 />
               </div>
+              <p className="text-sm text-gray-500">Minimum deposit: $1.00</p>
             </div>
 
             <div className="space-y-2">
@@ -156,9 +188,14 @@ export default function DepositModal({
                 <SelectContent>
                   {paymentMethods.map((method) => (
                     <SelectItem key={method.id} value={method.id}>
-                      <div className="flex items-center space-x-2">
-                        <CreditCard className="h-4 w-4" />
-                        <span>{method.label}</span>
+                      <div className="flex items-center space-x-3">
+                        <span className="text-lg">{method.icon}</span>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{method.label}</span>
+                          <span className="text-xs text-gray-500">
+                            {method.description}
+                          </span>
+                        </div>
                       </div>
                     </SelectItem>
                   ))}
@@ -166,10 +203,31 @@ export default function DepositModal({
               </Select>
             </div>
 
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+              <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                Payment Summary
+              </h4>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span>Amount:</span>
+                  <span className="font-medium">
+                    {currency} {depositAmount.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Payment Method:</span>
+                  <span className="font-medium">
+                    {selectedPaymentMethod?.label}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <Button
               onClick={handleDeposit}
               disabled={isDepositing || depositAmount < 1}
               className="w-full"
+              size="lg"
             >
               {isDepositing ? (
                 <>
@@ -177,18 +235,21 @@ export default function DepositModal({
                   Processing...
                 </>
               ) : (
-                `Deposit $${depositAmount}`
+                `Deposit ${currency} ${depositAmount.toFixed(2)}`
               )}
             </Button>
           </div>
         )}
 
         {currentStep === 2 && checkoutId && (
-          <div className="py-4">
+          <div className="py-6">
             <div className="space-y-4">
-              <div className="bg-blue-50 p-4 rounded-md">
-                <p className="text-blue-800">
-                  Amount to pay: ${depositAmount.toFixed(2)}
+              <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                <h4 className="font-medium text-green-900 dark:text-green-100 mb-2">
+                  Complete Your Payment
+                </h4>
+                <p className="text-sm text-green-700 dark:text-green-200">
+                  Amount to pay: {currency} {depositAmount.toFixed(2)}
                 </p>
               </div>
 
@@ -203,12 +264,12 @@ export default function DepositModal({
                 variant="outline"
                 className="w-full"
               >
-                Back
+                Back to Payment Options
               </Button>
             </div>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

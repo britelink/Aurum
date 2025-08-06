@@ -74,7 +74,15 @@ export default defineSchema({
     ),
     fee: v.optional(v.number()), // 8% cut
     timestamp: v.number(),
-    paymentMethod: v.union(v.literal("eco-usd"), v.literal("cash")),
+    paymentMethod: v.union(
+      v.literal("eco-usd"),
+      v.literal("cash"),
+      v.literal("card-usd"),
+      v.literal("zimswitch-usd"),
+      v.literal("zimswitch-zwg"),
+      v.literal("ecocash-usd"),
+      v.literal("ecocash-zwg"),
+    ),
   }).index("by_user", ["userId"]),
 
   leaderboard: defineTable({

@@ -53,7 +53,13 @@ export const placeBet = mutation({
 export const depositFunds = mutation({
   args: {
     amount: v.number(),
-    paymentMethod: v.union(v.literal("eco-usd"), v.literal("cash")),
+    paymentMethod: v.union(
+      v.literal("card-usd"),
+      v.literal("zimswitch-usd"),
+      v.literal("zimswitch-zwg"),
+      v.literal("ecocash-usd"),
+      v.literal("ecocash-zwg"),
+    ),
   },
   handler: async (ctx, args) => {
     console.log("Starting depositFunds mutation");

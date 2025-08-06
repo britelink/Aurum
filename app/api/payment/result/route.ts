@@ -41,15 +41,12 @@ export async function POST(req: NextRequest) {
       // Update user balance in Convex
       await convex.mutation(api.aurum.depositFunds, {
         amount: amount,
-        paymentMethod: "eco-usd", // or appropriate method based on payment
+        paymentMethod: "card-usd", // Default to card-usd, can be enhanced to detect actual method
       });
 
-      return NextResponse.json({
-        success: true,
-        message: "Payment processed successfully",
-        amount: amount,
-        userId: userId,
-      });
+      // Redirect to success page with amount
+      const successUrl = `/api/payment/success?amount=${amount}`;
+      return NextResponse.redirect(new URL(successUrl, req.url));
     } else if (statusResponse.pending) {
       return NextResponse.json({
         success: false,
@@ -57,20 +54,17 @@ export async function POST(req: NextRequest) {
         message: statusResponse.reason || "Payment is pending",
       });
     } else {
-      return NextResponse.json(
-        {
-          success: false,
-          message: statusResponse.error || "Payment failed",
-        },
-        { status: 400 },
-      );
+      // Redirect to failure page
+      const errorMessage = statusResponse.error || "Payment failed";
+      const failureUrl = `/api/payment/failure?error=${encodeURIComponent(errorMessage)}`;
+      return NextResponse.redirect(new URL(failureUrl, req.url));
     }
   } catch (error) {
     console.error("Payment processing failed:", error);
 
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 },
-    );
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    const failureUrl = `/api/payment/failure?error=${encodeURIComponent(errorMessage)}`;
+    return NextResponse.redirect(new URL(failureUrl, req.url));
   }
 }

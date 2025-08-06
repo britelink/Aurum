@@ -59,18 +59,37 @@ export default function PlayPage() {
       <main className="container mx-auto px-4 py-6">
         {(user.balance || 0) < 1 ? (
           <div className="text-center py-12">
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-4">
-              Insufficient Balance
-            </h2>
-            <p className="text-slate-600 dark:text-slate-400 mb-6">
-              You need at least $1 to start playing
-            </p>
-            <button
-              onClick={() => setShowDepositModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md"
-            >
-              Deposit Funds
-            </button>
+            <div className="max-w-md mx-auto">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
+                <div className="mb-6">
+                  <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">💰</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">
+                    Insufficient Balance
+                  </h2>
+                  <p className="text-slate-600 dark:text-slate-400">
+                    You need at least $1 to start playing
+                  </p>
+                </div>
+
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-6">
+                  <p className="text-sm text-blue-700 dark:text-blue-200">
+                    Current Balance:{" "}
+                    <span className="font-bold">
+                      ${user.balance?.toFixed(2) || "0.00"}
+                    </span>
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setShowDepositModal(true)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-medium transition-colors"
+                >
+                  💳 Deposit Funds
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           <TradingChart
