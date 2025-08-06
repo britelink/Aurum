@@ -253,7 +253,7 @@ export default function DepositModal({
               </div>
 
               <form
-                action="/payment/process"
+                action="/api/payment/process"
                 className="paymentWidgets"
                 data-brands={selectedPaymentMethod?.paymentBrand}
               />

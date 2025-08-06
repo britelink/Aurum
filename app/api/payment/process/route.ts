@@ -57,13 +57,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(new URL(failureUrl, req.url));
   }
 }
-
-// Handle GET requests (in case someone visits the page directly)
-export async function GET() {
-  return NextResponse.redirect(
-    new URL(
-      "/play",
-      process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
-    ),
-  );
-}
