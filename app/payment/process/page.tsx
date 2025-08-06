@@ -12,9 +12,8 @@ export async function POST(req: NextRequest) {
     const resourcePath = formData.get("resourcePath") as string;
 
     if (!resourcePath) {
-      return NextResponse.json(
-        { error: "Missing resource path" },
-        { status: 400 },
+      return NextResponse.redirect(
+        new URL("/payment/failure?error=Missing resource path", req.url),
       );
     }
 
@@ -28,15 +27,7 @@ export async function POST(req: NextRequest) {
         merchantTransactionId: string;
         amount: string;
       };
-      const merchantTransactionId = data.merchantTransactionId;
       const amount = parseFloat(data.amount);
-
-      if (!merchantTransactionId) {
-        throw new Error("Missing merchant transaction ID");
-      }
-
-      // Format: userId-timestamp
-      // const userId = merchantTransactionId.split("-")[0]; // Not needed as we use auth context
 
       // Update user balance in Convex
       await convex.mutation(api.aurum.depositFunds, {
@@ -48,11 +39,9 @@ export async function POST(req: NextRequest) {
       const successUrl = `/payment/success?amount=${amount}`;
       return NextResponse.redirect(new URL(successUrl, req.url));
     } else if (statusResponse.pending) {
-      return NextResponse.json({
-        success: false,
-        pending: true,
-        message: statusResponse.reason || "Payment is pending",
-      });
+      return NextResponse.redirect(
+        new URL("/payment/failure?error=Payment is pending", req.url),
+      );
     } else {
       // Redirect to failure page
       const errorMessage = statusResponse.error || "Payment failed";
@@ -67,4 +56,14 @@ export async function POST(req: NextRequest) {
     const failureUrl = `/payment/failure?error=${encodeURIComponent(errorMessage)}`;
     return NextResponse.redirect(new URL(failureUrl, req.url));
   }
+}
+
+// Handle GET requests (in case someone visits the page directly)
+export async function GET() {
+  return NextResponse.redirect(
+    new URL(
+      "/play",
+      process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
+    ),
+  );
 }
