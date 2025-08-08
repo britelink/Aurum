@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     console.log("Withdrawal request body:", body);
 
-    const { amount, paymentMethod, userId, email } = body;
+    const { amount, paymentMethod, userId } = body;
 
     // Validate request
     if (!amount || !paymentMethod || !userId) {

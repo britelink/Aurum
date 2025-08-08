@@ -14,6 +14,9 @@ export default function WithdrawPage() {
   const transactions = useQuery(api.aurum.getUserTransactions);
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState<number>(10);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] =
+    useState<string>("ecocash-usd");
 
   if (isLoading) {
     return (
@@ -67,10 +70,6 @@ export default function WithdrawPage() {
 
   const lastDeposit = deposits[0]; // Most recent deposit
   const lastWithdrawal = withdrawals[0]; // Most recent withdrawal
-
-  const [withdrawAmount, setWithdrawAmount] = useState<number>(10);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] =
-    useState<string>("ecocash-usd");
 
   const handleWithdraw = async () => {
     if (!isEligibleForWithdrawal) {
