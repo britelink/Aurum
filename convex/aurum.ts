@@ -167,31 +167,109 @@ export const adminDepositFunds = mutation({
 export const withdrawFunds = mutation({
   args: {
     amount: v.number(),
-    paymentMethod: v.union(v.literal("eco-usd"), v.literal("cash")),
+    paymentMethod: v.union(
+      v.literal("card-usd"),
+      v.literal("zimswitch-usd"),
+      v.literal("zimswitch-zwg"),
+      v.literal("ecocash-usd"),
+      v.literal("ecocash-zwg"),
+    ),
   },
   handler: async (ctx, args) => {
+    console.log("Starting withdrawFunds mutation");
+
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
     const userId = identity.subject.split("|")[0] as Id<"users">;
     const user = await ctx.db.get(userId);
     if (!user) throw new Error("User not found");
-    if ((user.balance || 0) < args.amount)
+
+    if ((user.balance || 0) < args.amount) {
       throw new Error("Insufficient funds");
+    }
 
-    await ctx.db.patch(userId, {
-      balance: (user.balance || 0) - args.amount,
-    });
+    console.log("Current balance:", user.balance);
+    console.log("Withdrawal amount:", args.amount);
 
-    return await ctx.db.insert("transactions", {
-      userId,
-      amount: -args.amount,
-      type: "withdrawal",
-      status: "completed",
-      fee: undefined,
-      timestamp: Date.now(),
-      paymentMethod: args.paymentMethod,
-    });
+    try {
+      // Update user's balance
+      await ctx.db.patch(userId, {
+        balance: (user.balance || 0) - args.amount,
+      });
+      console.log("Successfully updated balance");
+
+      const transaction = await ctx.db.insert("transactions", {
+        userId,
+        amount: -args.amount,
+        type: "withdrawal",
+        status: "pending", // Start as pending, will be updated by payment gateway
+        fee: undefined,
+        timestamp: Date.now(),
+        paymentMethod: args.paymentMethod,
+      });
+      console.log("Created withdrawal transaction:", transaction);
+
+      return transaction;
+    } catch (error) {
+      console.error("Error in withdrawFunds:", error);
+      throw error;
+    }
+  },
+});
+
+export const adminWithdrawFunds = mutation({
+  args: {
+    userId: v.string(),
+    amount: v.number(),
+    paymentMethod: v.union(
+      v.literal("card-usd"),
+      v.literal("zimswitch-usd"),
+      v.literal("zimswitch-zwg"),
+      v.literal("ecocash-usd"),
+      v.literal("ecocash-zwg"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    console.log("Starting adminWithdrawFunds mutation");
+    console.log("User ID:", args.userId);
+    console.log("Amount:", args.amount);
+    console.log("Payment method:", args.paymentMethod);
+
+    const userId = args.userId as Id<"users">;
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("User not found");
+
+    if ((user.balance || 0) < args.amount) {
+      throw new Error("Insufficient funds");
+    }
+
+    console.log("Current balance:", user.balance);
+    console.log("Withdrawal amount:", args.amount);
+
+    try {
+      // Update user's balance
+      await ctx.db.patch(userId, {
+        balance: (user.balance || 0) - args.amount,
+      });
+      console.log("Successfully updated balance");
+
+      const transaction = await ctx.db.insert("transactions", {
+        userId,
+        amount: -args.amount,
+        type: "withdrawal",
+        status: "pending",
+        fee: undefined,
+        timestamp: Date.now(),
+        paymentMethod: args.paymentMethod,
+      });
+      console.log("Created withdrawal transaction:", transaction);
+
+      return transaction;
+    } catch (error) {
+      console.error("Error in adminWithdrawFunds:", error);
+      throw error;
+    }
   },
 });
 
@@ -233,5 +311,22 @@ export const getCurrentUser = query({
     }
 
     return user;
+  },
+});
+
+export const getUserTransactions = query({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const userId = identity.subject.split("|")[0] as Id<"users">;
+
+    const transactions = await ctx.db
+      .query("transactions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc")
+      .collect();
+
+    return transactions;
   },
 });

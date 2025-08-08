@@ -44,7 +44,7 @@ export default function RootLayout({
 }>) {
   return (
     <ConvexAuthNextjsServerProvider>
-      <ThemeProvider defaultTheme="system" storageKey="aurum-theme">
+      <ThemeProvider defaultTheme="light" storageKey="aurum-theme">
         <html lang="en" suppressHydrationWarning>
           <body
             className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${playfair.variable} antialiased`}

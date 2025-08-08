@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import TradingChart from "../components/TradingChart";
+import Link from "next/link";
 
 export default function TradingDemoPage() {
   const [showTutorial, setShowTutorial] = useState(true);
@@ -78,7 +79,7 @@ export default function TradingDemoPage() {
               {onlineUsers.toLocaleString()} players online
             </div>
             <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium">
-              Play For Real
+              <Link href="/play">Play For Real</Link>
             </button>
           </div>
         </div>

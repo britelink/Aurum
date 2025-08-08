@@ -83,8 +83,17 @@ async function processPayment(req: NextRequest) {
         merchantTransactionId: string;
         amount: string;
       };
-      const amount = parseFloat(data.amount);
-      console.log("Amount:", amount);
+      let amount = parseFloat(data.amount);
+      console.log("Raw amount from payment:", data.amount);
+      console.log("Parsed amount:", amount);
+      console.log("Amount type:", typeof amount);
+
+      // EFT PAY might send amount in cents, convert to dollars if amount > 1000
+      if (amount > 1000) {
+        console.log("Amount seems to be in cents, converting to dollars");
+        amount = amount / 100;
+        console.log("Converted amount:", amount);
+      }
       console.log("Merchant transaction ID:", data.merchantTransactionId);
 
       // Extract user ID from merchant transaction ID

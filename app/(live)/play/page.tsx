@@ -43,13 +43,20 @@ export default function PlayPage() {
             </h1>
             <div className="flex items-center space-x-4">
               <div className="text-slate-600 dark:text-slate-400">
-                Balance: ${user.balance?.toFixed(2) || "0.00"}
+                Balance: ${user.balance?.toFixed(2) || "0.00"} (Raw:{" "}
+                {user.balance})
               </div>
               <button
                 onClick={() => setShowDepositModal(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm"
               >
                 Deposit
+              </button>
+              <button
+                onClick={() => (window.location.href = "/withdraw")}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm"
+              >
+                Withdraw
               </button>
             </div>
           </div>
@@ -78,7 +85,8 @@ export default function PlayPage() {
                     Current Balance:{" "}
                     <span className="font-bold">
                       ${user.balance?.toFixed(2) || "0.00"}
-                    </span>
+                    </span>{" "}
+                    (Raw: {user.balance})
                   </p>
                 </div>
 
