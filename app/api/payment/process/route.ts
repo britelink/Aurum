@@ -15,19 +15,30 @@ export async function GET(req: NextRequest) {
 }
 
 async function processPayment(req: NextRequest) {
+  console.log("=== PAYMENT PROCESSING START ===");
+  console.log("Request method:", req.method);
+  console.log("Request URL:", req.url);
+
   try {
     let resourcePath: string;
 
     if (req.method === "POST") {
+      console.log("Processing POST request");
       const formData = await req.formData();
       resourcePath = formData.get("resourcePath") as string;
+      console.log("POST resourcePath:", resourcePath);
     } else {
+      console.log("Processing GET request");
       // Handle GET request with query parameters
       const url = new URL(req.url);
       resourcePath = url.searchParams.get("resourcePath") || "";
+      console.log("GET resourcePath:", resourcePath);
     }
 
+    console.log("Resource path:", resourcePath);
+
     if (!resourcePath) {
+      console.log("ERROR: No resource path found");
       return new NextResponse(
         `<!DOCTYPE html>
         <html>
@@ -59,28 +70,47 @@ async function processPayment(req: NextRequest) {
       );
     }
 
+    console.log("Checking payment status...");
     // Check payment status
     const statusResponse =
       await paymentService.checkPaymentStatus(resourcePath);
+    console.log("Payment status response:", statusResponse);
 
     if (statusResponse.success) {
+      console.log("Payment successful! Processing...");
       // Extract transaction data
       const data = statusResponse.data as {
         merchantTransactionId: string;
         amount: string;
       };
       const amount = parseFloat(data.amount);
+      console.log("Amount:", amount);
+      console.log("Merchant transaction ID:", data.merchantTransactionId);
 
-      // Update user balance in Convex
-      await convex.mutation(api.aurum.depositFunds, {
-        amount: amount,
-        paymentMethod: "card-usd", // Default to card-usd, can be enhanced to detect actual method
-      });
+      // Extract user ID from merchant transaction ID
+      const userId = data.merchantTransactionId.split("-")[0];
+      console.log("Extracted user ID:", userId);
+
+      // Update user balance in Convex using admin mutation
+      console.log("Calling Convex mutation...");
+      try {
+        await convex.mutation(api.aurum.adminDepositFunds, {
+          userId: userId,
+          amount: amount,
+          paymentMethod: "card-usd",
+        });
+        console.log("Convex mutation successful");
+      } catch (convexError) {
+        console.error("Convex mutation failed:", convexError);
+        throw convexError;
+      }
 
       // Redirect to play page on success
+      console.log("Redirecting to play page...");
       const playUrl = `/play`;
       return NextResponse.redirect(new URL(playUrl, req.url));
     } else if (statusResponse.pending) {
+      console.log("Payment is pending");
       return new NextResponse(
         `<!DOCTYPE html>
         <html>
@@ -111,6 +141,7 @@ async function processPayment(req: NextRequest) {
         },
       );
     } else {
+      console.log("Payment failed:", statusResponse.error);
       // Show error page
       const errorMessage = statusResponse.error || "Payment failed";
       return new NextResponse(
@@ -145,7 +176,16 @@ async function processPayment(req: NextRequest) {
       );
     }
   } catch (error) {
-    console.error("Payment processing failed:", error);
+    console.error("=== PAYMENT PROCESSING ERROR ===");
+    console.error("Error details:", error);
+    console.error(
+      "Error message:",
+      error instanceof Error ? error.message : "Unknown error",
+    );
+    console.error(
+      "Error stack:",
+      error instanceof Error ? error.stack : "No stack trace",
+    );
 
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
