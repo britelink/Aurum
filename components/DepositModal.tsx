@@ -100,7 +100,7 @@ export default function DepositModal({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount: depositAmount,
+          amount: depositAmount * 100, // Convert to cents for API
           currency: currency as Currency,
           paymentMethod: paymentMethod,
           userId: userId,

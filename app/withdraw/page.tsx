@@ -60,7 +60,7 @@ export default function WithdrawPage() {
     );
   }
 
-  const currentBalance = user.balance || 0;
+  const currentBalance = (user.balance || 0) / 100; // Convert from cents to dollars
   const isEligibleForWithdrawal = currentBalance >= 10; // Minimum $10 to withdraw
 
   // Filter transactions
@@ -100,7 +100,7 @@ export default function WithdrawPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount: withdrawAmount,
+          amount: withdrawAmount * 100, // Convert to cents for API
           paymentMethod: selectedPaymentMethod,
           userId: user._id,
           email: user.email,
