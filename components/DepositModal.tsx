@@ -118,7 +118,7 @@ export default function DepositModal({
 
       // Load payment widget
       const script = document.createElement("script");
-      script.src = `https://eu-test.oppwa.com/v1/paymentWidgets.js?checkoutId=${checkoutId}`;
+      script.src = `https://eu-prod.oppwa.com/v1/paymentWidgets.js?checkoutId=${checkoutId}`;
       script.async = true;
       script.onerror = () => {
         toast.error("Failed to load payment widget. Please try again.");
