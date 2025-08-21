@@ -100,7 +100,7 @@ export default function DepositModal({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount: depositAmount * 100, // Convert to cents for API
+          amount: depositAmount, // Send original amount
           currency: currency as Currency,
           paymentMethod: paymentMethod,
           userId: userId,
@@ -256,6 +256,7 @@ export default function DepositModal({
                 action="/api/payment/process"
                 className="paymentWidgets"
                 data-brands={selectedPaymentMethod?.paymentBrand}
+                data-testMode={selectedPaymentMethod?.testMode}
               />
 
               <Button

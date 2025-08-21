@@ -100,7 +100,7 @@ export default function WithdrawPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount: withdrawAmount * 100, // Convert to cents for API
+          amount: withdrawAmount, // Send original amount
           paymentMethod: selectedPaymentMethod,
           userId: user._id,
           email: user.email,

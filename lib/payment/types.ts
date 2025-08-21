@@ -20,6 +20,7 @@ export interface CheckoutRequest {
   currency: Currency;
   paymentMethod: PaymentMethod;
   userId: Id<"users">;
+  email?: string;
 }
 
 export interface CheckoutResponse {

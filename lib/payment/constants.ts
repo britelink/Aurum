@@ -31,12 +31,12 @@ export const PAYMENT_CREDENTIALS: Record<PaymentMethod, PaymentCredentials> = {
     entityId:
       process.env.ECOCASH_USD_ENTITY_ID || "8ac9a4c7987eb6be0198c63659ef1909",
     paymentBrand: "ECOCASH",
-    testMode: "EXTERNAL",
+    testMode: "INTERNAL",
   },
   "ecocash-zwg": {
     entityId:
       process.env.ECOCASH_ZWG_ENTITY_ID || "8ac9a4c7987eb6be0198c63659ef1909",
     paymentBrand: "ECOCASH",
-    testMode: "EXTERNAL",
+    testMode: "INTERNAL",
   },
 };

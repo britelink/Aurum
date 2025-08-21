@@ -29,6 +29,7 @@ export class PaymentService {
         paymentType: "DB",
         testMode: credentials.testMode,
         merchantTransactionId: `${request.userId}-${Date.now()}`,
+        "customer.email": request.email || "",
       });
 
       const response = await fetch(`${this.config.apiUrl}/v1/checkouts`, {

@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
       currency: body.currency || "USD",
       paymentMethod: body.paymentMethod,
       userId: body.userId,
+      email: body.email,
     };
 
     const checkoutResponse =
