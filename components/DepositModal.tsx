@@ -49,6 +49,7 @@ export default function DepositModal({
       icon: "💳",
       currency: "USD",
       paymentBrand: "VISA MASTER",
+      testMode: "INTERNAL",
     },
     {
       id: "zimswitch-usd" as PaymentMethod,
@@ -57,6 +58,7 @@ export default function DepositModal({
       icon: "🏦",
       currency: "USD",
       paymentBrand: "PRIVATE_LABEL",
+      testMode: "EXTERNAL",
     },
     {
       id: "zimswitch-zwg" as PaymentMethod,
@@ -65,6 +67,7 @@ export default function DepositModal({
       icon: "🏦",
       currency: "ZWG",
       paymentBrand: "PRIVATE_LABEL",
+      testMode: "EXTERNAL",
     },
     {
       id: "ecocash-usd" as PaymentMethod,
@@ -73,6 +76,7 @@ export default function DepositModal({
       icon: "📱",
       currency: "USD",
       paymentBrand: "ECOCASH",
+      testMode: "INTERNAL",
     },
     {
       id: "ecocash-zwg" as PaymentMethod,
@@ -81,6 +85,7 @@ export default function DepositModal({
       icon: "📱",
       currency: "ZWG",
       paymentBrand: "ECOCASH",
+      testMode: "INTERNAL",
     },
   ];
 
