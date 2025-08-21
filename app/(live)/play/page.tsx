@@ -4,22 +4,13 @@ import { useConvexAuth } from "convex/react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import TradingChart from "@/app/(demo)/components/TradingChart";
-import DepositModal from "@/components/DepositModal";
 import { toast } from "react-hot-toast";
+import { useRouter } from "next/navigation";
 
 export default function PlayPage() {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const user = useQuery(api.aurum.getCurrentUser);
-
-  const [showDepositModal, setShowDepositModal] = useState(false);
-
-  const handleDepositComplete = async (success: boolean, amount?: number) => {
-    if (success && amount) {
-      toast.success(`Successfully deposited $${amount.toFixed(2)}`);
-      // The balance will be updated through the API route
-    }
-    setShowDepositModal(false);
-  };
+  const router = useRouter();
 
   if (isLoading) {
     return <div>Loading...</div>;
@@ -46,13 +37,13 @@ export default function PlayPage() {
                 Balance: ${((user.balance || 0) / 100).toFixed(2)}
               </div>
               <button
-                onClick={() => setShowDepositModal(true)}
+                onClick={() => router.push("/game-payment")}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm"
               >
                 Deposit
               </button>
               <button
-                onClick={() => (window.location.href = "/withdraw")}
+                onClick={() => router.push("/withdraw")}
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm"
               >
                 Withdraw
@@ -89,7 +80,7 @@ export default function PlayPage() {
                 </div>
 
                 <button
-                  onClick={() => setShowDepositModal(true)}
+                  onClick={() => router.push("/game-payment")}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-medium transition-colors"
                 >
                   💳 Deposit Funds
@@ -106,14 +97,6 @@ export default function PlayPage() {
           />
         )}
       </main>
-
-      <DepositModal
-        open={showDepositModal}
-        onOpenChange={setShowDepositModal}
-        userId={user._id}
-        email={user.email}
-        onComplete={handleDepositComplete}
-      />
     </div>
   );
 }
