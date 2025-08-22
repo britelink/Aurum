@@ -27,7 +27,6 @@ export class PaymentService {
         amount: request.amount.toFixed(2),
         currency: request.currency,
         paymentType: "DB",
-        testMode: credentials.testMode,
         merchantTransactionId: `${request.userId}-${Date.now()}`,
         "customer.email": request.email || "",
       });
@@ -85,7 +84,6 @@ export class PaymentService {
         amount: request.amount.toFixed(2),
         currency: request.currency,
         paymentType: "PA", // PA for payout/withdrawal
-        testMode: credentials.testMode,
         merchantTransactionId: `${request.userId}-${Date.now()}`,
       });
 
