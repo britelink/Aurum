@@ -63,7 +63,7 @@ export default function GamePaymentPage() {
       description: "Mobile money payment in USD",
       icon: "📱",
       currency: "USD",
-      paymentBrand: "PRIVATE_LABEL",
+      paymentBrand: "ECOCASH",
     },
     {
       id: "card-usd" as PaymentMethod,
