@@ -55,10 +55,6 @@ export default function GamePaymentPage() {
     setState((prev) => ({ ...prev, ...updates }));
   }, []);
 
-  const resetState = useCallback(() => {
-    setState(INITIAL_STATE);
-  }, []);
-
   // Payment methods
   const paymentMethods = [
     {
@@ -254,7 +250,7 @@ export default function GamePaymentPage() {
             </div>
             <div className="flex items-center space-x-4">
               <div className="text-slate-600 dark:text-slate-400">
-                Balance: ${((user.balance || 0) / 100).toFixed(2)}
+                Balance: ${(user.balance || 0).toFixed(2)}
               </div>
             </div>
           </div>

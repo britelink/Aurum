@@ -32,7 +32,7 @@ export default function PlayPage() {
             </h1>
             <div className="flex items-center space-x-4">
               <div className="text-slate-600 dark:text-slate-400">
-                Balance: ${((user.balance || 0) / 100).toFixed(2)}
+                Balance: ${(user.balance || 0).toFixed(2)}
               </div>
               <button
                 onClick={() => router.push("/game-payment")}
@@ -52,7 +52,7 @@ export default function PlayPage() {
       </header>
 
       <main className="container mx-auto px-4 py-6">
-        {(user.balance || 0) / 100 < 1 ? (
+        {(user.balance || 0) < 1 ? (
           <div className="text-center py-12">
             <div className="max-w-md mx-auto">
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
@@ -72,7 +72,7 @@ export default function PlayPage() {
                   <p className="text-sm text-blue-700 dark:text-blue-200">
                     Current Balance:{" "}
                     <span className="font-bold">
-                      ${((user.balance || 0) / 100).toFixed(2)}
+                      ${(user.balance || 0).toFixed(2)}
                     </span>
                   </p>
                 </div>
