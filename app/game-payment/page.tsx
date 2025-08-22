@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useConvexAuth } from "convex/react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { ArrowLeft, Wallet, DollarSign, CreditCard } from "lucide-react";
+import { ArrowLeft, DollarSign, CreditCard } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -62,6 +62,14 @@ export default function GamePaymentPage() {
   // Payment methods
   const paymentMethods = [
     {
+      id: "ecocash-usd" as PaymentMethod,
+      label: "EcoCash (USD)",
+      description: "Mobile money payment in USD",
+      icon: "📱",
+      currency: "USD",
+      paymentBrand: "PRIVATE_LABEL",
+    },
+    {
       id: "card-usd" as PaymentMethod,
       label: "Credit/Debit Card (USD)",
       description: "VISA, Mastercard - International cards accepted",
@@ -76,30 +84,6 @@ export default function GamePaymentPage() {
       icon: "🏦",
       currency: "USD",
       paymentBrand: "PRIVATE_LABEL",
-    },
-    {
-      id: "zimswitch-zwg" as PaymentMethod,
-      label: "Zimswitch (ZWG)",
-      description: "Local Zimbabwe bank cards in ZWG",
-      icon: "🏦",
-      currency: "ZWG",
-      paymentBrand: "PRIVATE_LABEL",
-    },
-    {
-      id: "ecocash-usd" as PaymentMethod,
-      label: "EcoCash (USD)",
-      description: "Mobile money payment in USD",
-      icon: "📱",
-      currency: "USD",
-      paymentBrand: "ECOCASH",
-    },
-    {
-      id: "ecocash-zwg" as PaymentMethod,
-      label: "EcoCash (ZWG)",
-      description: "Mobile money payment in ZWG",
-      icon: "📱",
-      currency: "ZWG",
-      paymentBrand: "ECOCASH",
     },
   ];
 
@@ -167,20 +151,6 @@ export default function GamePaymentPage() {
       }
     },
     [user, updateState],
-  );
-
-  const handlePaymentComplete = useCallback(
-    (success: boolean) => {
-      if (success) {
-        toast.success("Payment processed successfully!");
-        resetState();
-        router.push("/play");
-      } else {
-        toast.error("Payment failed. Please try again.");
-        updateState({ currentStep: 2 });
-      }
-    },
-    [resetState, router, updateState],
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
