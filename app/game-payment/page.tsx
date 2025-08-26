@@ -176,7 +176,7 @@ export default function GamePaymentPage() {
                   img.style.margin = "20px 0";
                   brandGroup.parentElement?.insertBefore(img, brandGroup);
                 }
-              } catch (_) {
+              } catch {
                 // no-op
               }
             },
@@ -207,7 +207,7 @@ export default function GamePaymentPage() {
                   img.style.margin = "20px 0";
                   brandGroup.parentElement?.insertBefore(img, brandGroup);
                 }
-              } catch (_) {
+              } catch {
                 // no-op
               }
             },
