@@ -129,6 +129,68 @@ export default function GamePaymentPage() {
           currentStep: 2,
         });
 
+        // Configure widget options per payment method BEFORE loading the script
+        const anyWindow = window as unknown as {
+          wpwlOptions?: Record<string, unknown>;
+        };
+
+        if (paymentMethod.startsWith("ecocash")) {
+          anyWindow.wpwlOptions = {
+            style: "plain",
+            brandDetection: false,
+            showPlaceholders: false,
+            requireCvv: false,
+            onReady: function () {
+              try {
+                const brandLabel = document.querySelector(
+                  ".wpwl-label-brand",
+                ) as HTMLElement | null;
+                if (brandLabel) brandLabel.textContent = "EcoCash";
+                const cardNumberLabel = document.querySelector(
+                  ".wpwl-label-cardNumber",
+                ) as HTMLElement | null;
+                if (cardNumberLabel)
+                  cardNumberLabel.textContent = "Mobile Number";
+
+                // Hide card holder + expiry for mobile flow to mimic PHP setup
+                const cardHolderGroup = document.querySelector(
+                  ".wpwl-group-cardHolder",
+                ) as HTMLElement | null;
+                if (cardHolderGroup) cardHolderGroup.style.display = "none";
+                const expiryGroup = document.querySelector(
+                  ".wpwl-group-expiry",
+                ) as HTMLElement | null;
+                if (expiryGroup) expiryGroup.style.display = "none";
+              } catch (_) {
+                // no-op
+              }
+            },
+          } as Record<string, unknown>;
+        } else if (paymentMethod.startsWith("zimswitch")) {
+          anyWindow.wpwlOptions = {
+            style: "plain",
+            brandDetection: false,
+            showPlaceholders: false,
+            onReady: function () {
+              try {
+                const brandLabel = document.querySelector(
+                  ".wpwl-label-brand",
+                ) as HTMLElement | null;
+                if (brandLabel) brandLabel.textContent = "ZimSwitch";
+              } catch (_) {
+                // no-op
+              }
+            },
+          } as Record<string, unknown>;
+        } else {
+          // Default for card payments
+          anyWindow.wpwlOptions = {
+            style: "card",
+            brandDetection: true,
+            showPlaceholders: false,
+          } as Record<string, unknown>;
+        }
+
         // Load payment widget
         const script = document.createElement("script");
         script.src = `https://eu-prod.oppwa.com/v1/paymentWidgets.js?checkoutId=${checkoutId}`;
