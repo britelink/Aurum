@@ -60,7 +60,7 @@ export default function WithdrawPage() {
     );
   }
 
-  const currentBalance = (user.balance || 0) / 100; // Convert from cents to dollars
+  const currentBalance = user.balance || 0; // Balance is stored as dollars; no conversion
   const isEligibleForWithdrawal = currentBalance >= 10; // Minimum $10 to withdraw
 
   // Filter transactions
