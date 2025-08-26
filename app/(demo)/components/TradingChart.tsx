@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
@@ -78,6 +78,189 @@ export default function TradingChart({
   const [tradePath, setTradePath] = useState<
     { x: number; y: number; price: number; time: number }[]
   >([]);
+
+  // Define completeTrade with useCallback to avoid dependency issues
+  const completeTrade = useCallback(async () => {
+    if (!activeTrade) return;
+    setIsTrading(false);
+
+    // Determine the bet imbalance - which side has more bets
+    const finalBuyVotes = sessionPlayers
+      .filter((p) => p.position === "buy")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const finalSellVotes = sessionPlayers
+      .filter((p) => p.position === "sell")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    // The key principle: the side with FEWER bets should win
+    const winningPosition =
+      finalBuyVotes === finalSellVotes
+        ? "neutral" // Neutral if equal bets on both sides
+        : finalBuyVotes > finalSellVotes
+          ? "sell" // If more people bet UP, DOWN should win
+          : "buy"; // If more people bet DOWN, UP should win
+
+    // IMPORTANT: Force the final price movement to match the winning side
+    // This ensures the visual representation matches the actual winners
+    const finalPrice =
+      winningPosition === "neutral"
+        ? currentPrice
+        : winningPosition === "buy"
+          ? currentPrice + 0.0005 // Force line up if BUY wins
+          : currentPrice - 0.0005; // Force line down if SELL wins
+
+    setCurrentPrice(finalPrice);
+    setPriceHistory((prev) => [...prev.slice(0, -1), finalPrice]);
+
+    if (tradePath.length > 0) {
+      // Update the last point in trade path to reflect final direction
+      setTradePath((prev) => {
+        const updatedPath = [...prev];
+        if (updatedPath.length > 0) {
+          updatedPath[updatedPath.length - 1] = {
+            ...updatedPath[updatedPath.length - 1],
+            price: finalPrice,
+          };
+        }
+        return updatedPath;
+      });
+    }
+
+    // Calculate winners and losers
+    const winners = sessionPlayers.filter(
+      (player) =>
+        player.position === winningPosition || winningPosition === "neutral",
+    );
+    const losers = sessionPlayers.filter(
+      (player) =>
+        player.position !== winningPosition && winningPosition !== "neutral",
+    );
+
+    // Calculate total losing bet amount
+    const losingTotal = losers.reduce((sum, loser) => sum + loser.amount, 0);
+    const winningTotal = winners.reduce(
+      (sum, winner) => sum + winner.amount,
+      0,
+    );
+
+    // Distribute the pot
+    const houseFee = losingTotal * 0.08; // 8% house fee
+    const winnersPot = losingTotal - houseFee;
+
+    // Calculate each winner's share
+    const winnersWithProfits = winners.map((winner) => {
+      const profitShare =
+        winningPosition === "neutral"
+          ? 0 // No profit in case of a neutral result
+          : (winner.amount / winningTotal) * winnersPot;
+
+      const totalReturn = winner.amount + profitShare;
+      const roi = profitShare > 0 ? (profitShare / winner.amount) * 100 : 0;
+
+      return {
+        playerId: winner.id,
+        id: winner.id,
+        position: winner.position,
+        amount: winner.amount,
+        initialBet: winner.amount, // Required field
+        profit: profitShare,
+        totalReturn: totalReturn, // Required field
+        roi: roi, // Required field (Return on Investment percentage)
+      };
+    });
+
+    // Generate session result
+    const result: SessionResult = {
+      winners: winnersWithProfits,
+      losers: losers.map((loser) => ({
+        ...loser,
+        playerId: loser.id,
+        initialBet: loser.amount,
+        totalReturn: 0,
+        roi: -100, // Lost everything, so ROI is -100%
+        profit: 0, // Add missing profit property required by PlayerResult type
+      })),
+      winningPosition: winningPosition as BetPosition,
+      isNeutral: winningPosition === "neutral",
+      players: sessionPlayers,
+      buyTotal: finalBuyVotes,
+      sellTotal: finalSellVotes,
+      isFoul: false,
+      timestamp: Date.now(),
+    };
+
+    // Update balance based on result
+    const userWon = result.winners.some((w) => w.playerId === userPlayerId);
+    if (userWon && !result.isNeutral) {
+      const userWinAmount =
+        result.winners.find((w) => w.playerId === userPlayerId)?.profit || 0;
+      await depositFunds({
+        amount: activeTrade.amount + userWinAmount,
+        paymentMethod: "card-usd",
+      });
+      // Debit house by the payout amount (stake + profit)
+      fetch("/api/house/debit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: activeTrade.amount + userWinAmount }),
+      }).catch(() => {});
+    } else if (result.isNeutral) {
+      await depositFunds({
+        amount: activeTrade.amount,
+        paymentMethod: "card-usd",
+      });
+      // Neutral: return player stake; also debit house to return stake back
+      fetch("/api/house/debit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: activeTrade.amount }),
+      }).catch(() => {});
+    }
+
+    const endPrice = finalPrice; // Use our forced final price
+
+    // Send trade data to parent component if callback exists
+    if (onTradeComplete) {
+      onTradeComplete({
+        id: activeTrade.id,
+        position: activeTrade.position,
+        amount: activeTrade.amount,
+        entryPrice: activeTrade.entryPrice,
+        exitPrice: endPrice,
+        profit: userWon
+          ? winnersWithProfits.find((w) => w.playerId === userPlayerId)
+              ?.profit || 0
+          : -activeTrade.amount,
+        time: new Date().toLocaleTimeString(),
+        isWin: userWon && !result.isNeutral,
+      });
+    }
+
+    // Set session result for display
+    setSessionResult(result);
+
+    // Show visual result
+    setTimeout(() => {
+      showTradeResult();
+    }, 100);
+
+    // Clear for next round
+    setTimeout(() => {
+      setActiveTrade(null);
+      setSessionPlayers([]);
+      setSessionResult(null);
+      setTradePath([]);
+    }, 5000);
+  }, [
+    activeTrade,
+    sessionPlayers,
+    currentPrice,
+    tradePath,
+    userPlayerId,
+    depositFunds,
+    onTradeComplete,
+  ]);
 
   // Generate initial price history (5 minute simulation with more data points)
   useEffect(() => {
@@ -627,181 +810,6 @@ export default function TradingChart({
       if (overlay) {
         chartElement.removeChild(overlay);
       }
-    }, 5000);
-  };
-
-  // Correct completeTrade function
-  const completeTrade = async () => {
-    if (!activeTrade) return;
-    setIsTrading(false);
-
-    // Determine the bet imbalance - which side has more bets
-    const finalBuyVotes = sessionPlayers
-      .filter((p) => p.position === "buy")
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    const finalSellVotes = sessionPlayers
-      .filter((p) => p.position === "sell")
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    // The key principle: the side with FEWER bets should win
-    const winningPosition =
-      finalBuyVotes === finalSellVotes
-        ? "neutral" // Neutral if equal bets on both sides
-        : finalBuyVotes > finalSellVotes
-          ? "sell" // If more people bet UP, DOWN should win
-          : "buy"; // If more people bet DOWN, UP should win
-
-    // IMPORTANT: Force the final price movement to match the winning side
-    // This ensures the visual representation matches the actual winners
-    const finalPrice =
-      winningPosition === "neutral"
-        ? currentPrice
-        : winningPosition === "buy"
-          ? currentPrice + 0.0005 // Force line up if BUY wins
-          : currentPrice - 0.0005; // Force line down if SELL wins
-
-    setCurrentPrice(finalPrice);
-    setPriceHistory((prev) => [...prev.slice(0, -1), finalPrice]);
-
-    if (tradePath.length > 0) {
-      // Update the last point in trade path to reflect final direction
-      setTradePath((prev) => {
-        const updatedPath = [...prev];
-        if (updatedPath.length > 0) {
-          updatedPath[updatedPath.length - 1] = {
-            ...updatedPath[updatedPath.length - 1],
-            price: finalPrice,
-          };
-        }
-        return updatedPath;
-      });
-    }
-
-    // Calculate winners and losers
-    const winners = sessionPlayers.filter(
-      (player) =>
-        player.position === winningPosition || winningPosition === "neutral",
-    );
-    const losers = sessionPlayers.filter(
-      (player) =>
-        player.position !== winningPosition && winningPosition !== "neutral",
-    );
-
-    // Calculate total losing bet amount
-    const losingTotal = losers.reduce((sum, loser) => sum + loser.amount, 0);
-    const winningTotal = winners.reduce(
-      (sum, winner) => sum + winner.amount,
-      0,
-    );
-
-    // Distribute the pot
-    const houseFee = losingTotal * 0.08; // 8% house fee
-    const winnersPot = losingTotal - houseFee;
-
-    // Calculate each winner's share
-    const winnersWithProfits = winners.map((winner) => {
-      const profitShare =
-        winningPosition === "neutral"
-          ? 0 // No profit in case of a neutral result
-          : (winner.amount / winningTotal) * winnersPot;
-
-      const totalReturn = winner.amount + profitShare;
-      const roi = profitShare > 0 ? (profitShare / winner.amount) * 100 : 0;
-
-      return {
-        playerId: winner.id,
-        id: winner.id,
-        position: winner.position,
-        amount: winner.amount,
-        initialBet: winner.amount, // Required field
-        profit: profitShare,
-        totalReturn: totalReturn, // Required field
-        roi: roi, // Required field (Return on Investment percentage)
-      };
-    });
-
-    // Generate session result
-    const result: SessionResult = {
-      winners: winnersWithProfits,
-      losers: losers.map((loser) => ({
-        ...loser,
-        playerId: loser.id,
-        initialBet: loser.amount,
-        totalReturn: 0,
-        roi: -100, // Lost everything, so ROI is -100%
-        profit: 0, // Add missing profit property required by PlayerResult type
-      })),
-      winningPosition: winningPosition as BetPosition,
-      isNeutral: winningPosition === "neutral",
-      players: sessionPlayers,
-      buyTotal: finalBuyVotes,
-      sellTotal: finalSellVotes,
-      isFoul: false,
-      timestamp: Date.now(),
-    };
-
-    // Update balance based on result
-    const userWon = result.winners.some((w) => w.playerId === userPlayerId);
-    if (userWon && !result.isNeutral) {
-      const userWinAmount =
-        result.winners.find((w) => w.playerId === userPlayerId)?.profit || 0;
-      await depositFunds({
-        amount: activeTrade.amount + userWinAmount,
-        paymentMethod: "card-usd",
-      });
-      // Debit house by the payout amount (stake + profit)
-      fetch("/api/house/debit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: activeTrade.amount + userWinAmount }),
-      }).catch(() => {});
-    } else if (result.isNeutral) {
-      await depositFunds({
-        amount: activeTrade.amount,
-        paymentMethod: "card-usd",
-      });
-      // Neutral: return player stake; also debit house to return stake back
-      fetch("/api/house/debit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: activeTrade.amount }),
-      }).catch(() => {});
-    }
-
-    const endPrice = finalPrice; // Use our forced final price
-
-    // Send trade data to parent component if callback exists
-    if (onTradeComplete) {
-      onTradeComplete({
-        id: activeTrade.id,
-        position: activeTrade.position,
-        amount: activeTrade.amount,
-        entryPrice: activeTrade.entryPrice,
-        exitPrice: endPrice,
-        profit: userWon
-          ? winnersWithProfits.find((w) => w.playerId === userPlayerId)
-              ?.profit || 0
-          : -activeTrade.amount,
-        time: new Date().toLocaleTimeString(),
-        isWin: userWon && !result.isNeutral,
-      });
-    }
-
-    // Set session result for display
-    setSessionResult(result);
-
-    // Show visual result
-    setTimeout(() => {
-      showTradeResult();
-    }, 100);
-
-    // Clear for next round
-    setTimeout(() => {
-      setActiveTrade(null);
-      setSessionPlayers([]);
-      setSessionResult(null);
-      setTradePath([]);
     }, 5000);
   };
 
