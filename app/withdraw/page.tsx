@@ -72,62 +72,21 @@ export default function WithdrawPage() {
   const lastWithdrawal = withdrawals[0]; // Most recent withdrawal
 
   const handleWithdraw = async () => {
+    // For now, route to manual withdrawal instructions without changing balance
     if (!isEligibleForWithdrawal) {
       alert("You need at least $10 to make a withdrawal.");
       return;
     }
-
     if (withdrawAmount < 10) {
       alert("Minimum withdrawal amount is $10.");
       return;
     }
-
     if (withdrawAmount > currentBalance) {
       alert("Insufficient balance for this withdrawal amount.");
       return;
     }
 
-    setIsProcessing(true);
-    try {
-      console.log("Initiating withdrawal...");
-      console.log("Amount:", withdrawAmount);
-      console.log("Payment method:", selectedPaymentMethod);
-      console.log("User ID:", user._id);
-
-      const response = await fetch("/api/withdrawal/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          amount: withdrawAmount, // Send original amount
-          paymentMethod: selectedPaymentMethod,
-          userId: user._id,
-          email: user.email,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Withdrawal failed");
-      }
-
-      console.log("Withdrawal initiated successfully:", result);
-      alert(
-        `Withdrawal of $${withdrawAmount.toFixed(2)} has been initiated successfully!`,
-      );
-
-      // Refresh the page to show updated balance
-      window.location.reload();
-    } catch (error) {
-      console.error("Withdrawal failed:", error);
-      alert(
-        `Withdrawal failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-    } finally {
-      setIsProcessing(false);
-    }
+    window.location.href = "/withdraw/manual";
   };
 
   return (
