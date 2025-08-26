@@ -88,9 +88,12 @@ async function processPayment(req: NextRequest) {
       console.log("Parsed amount:", amount);
       console.log("Amount type:", typeof amount);
 
-      // EFT PAY might send amount in cents, convert to dollars if amount >= 1000
-      if (amount >= 1000) {
-        console.log("Amount seems to be in cents, converting to dollars");
+      // Normalize amount: if gateway sends cents (integer, no decimal), convert to dollars
+      const rawAmount = (statusResponse.data as any)?.amount as string;
+      if (rawAmount && !rawAmount.includes(".")) {
+        console.log(
+          "Amount appears to be cents (no decimal point). Converting to dollars.",
+        );
         amount = amount / 100;
         console.log("Converted amount:", amount);
       }
