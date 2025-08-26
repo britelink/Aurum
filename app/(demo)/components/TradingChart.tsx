@@ -38,6 +38,8 @@ export default function TradingChart({
   const serverBalance = currentUser?.balance || 0;
   const withdrawFunds = useMutation(api.aurum.withdrawFunds);
   const depositFunds = useMutation(api.aurum.depositFunds);
+  const adminDepositFunds = useMutation(api.aurum.adminDepositFunds);
+  const adminWithdrawFunds = useMutation(api.aurum.adminWithdrawFunds);
   const [betAmount, setBetAmount] = useState<BetAmount>(1);
   const [sessionPlayers, setSessionPlayers] = useState<Player[]>([]);
   const [sessionResult, setSessionResult] = useState<SessionResult | null>(
@@ -195,28 +197,57 @@ export default function TradingChart({
     if (userWon && !result.isNeutral) {
       const userWinAmount =
         result.winners.find((w) => w.playerId === userPlayerId)?.profit || 0;
-      await depositFunds({
-        amount: activeTrade.amount + userWinAmount,
-        paymentMethod: "card-usd",
-      });
+      console.log("User won! Depositing:", activeTrade.amount + userWinAmount);
+      try {
+        await depositFunds({
+          amount: activeTrade.amount + userWinAmount,
+          paymentMethod: "card-usd",
+        });
+        console.log("Deposit successful for winner");
+      } catch (error) {
+        console.error("Deposit failed for winner:", error);
+      }
       // Debit house by the payout amount (stake + profit)
-      fetch("/api/house/debit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: activeTrade.amount + userWinAmount }),
-      }).catch(() => {});
+      try {
+        await adminWithdrawFunds({
+          userId: "ks72m74heawkx1p7n524fbtnt97mj6y1",
+          amount: activeTrade.amount + userWinAmount,
+          paymentMethod: "card-usd",
+        });
+        console.log("House debited successfully for winner");
+      } catch (error) {
+        console.error("House debit failed for winner:", error);
+      }
     } else if (result.isNeutral) {
-      await depositFunds({
-        amount: activeTrade.amount,
-        paymentMethod: "card-usd",
-      });
+      console.log("Neutral result! Refunding stake:", activeTrade.amount);
+      try {
+        await depositFunds({
+          amount: activeTrade.amount,
+          paymentMethod: "card-usd",
+        });
+        console.log("Refund successful for neutral");
+      } catch (error) {
+        console.error("Refund failed for neutral:", error);
+      }
       // Neutral: return player stake; also debit house to return stake back
-      fetch("/api/house/debit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: activeTrade.amount }),
-      }).catch(() => {});
+      try {
+        await adminWithdrawFunds({
+          userId: "ks72m74heawkx1p7n524fbtnt97mj6y1",
+          amount: activeTrade.amount,
+          paymentMethod: "card-usd",
+        });
+        console.log("House debited successfully for neutral");
+      } catch (error) {
+        console.error("House debit failed for neutral:", error);
+      }
+    } else {
+      // User lost - no action needed since stake was already deducted when placing bet
+      // House keeps the stake (already credited when bet was placed)
+      console.log("User lost - stake already deducted. No refund needed.");
     }
+
+    // Small delay to ensure UI updates properly
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     const endPrice = finalPrice; // Use our forced final price
 
@@ -259,6 +290,8 @@ export default function TradingChart({
     tradePath,
     userPlayerId,
     depositFunds,
+    adminDepositFunds,
+    adminWithdrawFunds,
     onTradeComplete,
   ]);
 
@@ -622,14 +655,26 @@ export default function TradingChart({
     const aiPlayers = generateRandomAIPlayers(0, 15, position);
     setSessionPlayers([...filteredPlayers, ...aiPlayers, userBet]);
     try {
-      await withdrawFunds({ amount: betAmount, paymentMethod: "card-usd" });
+      console.log("Attempting to withdraw funds:", betAmount);
+      const withdrawResult = await withdrawFunds({
+        amount: betAmount,
+        paymentMethod: "card-usd",
+      });
+      console.log("Withdraw result:", withdrawResult);
       // Credit house with the stake
-      fetch("/api/house/credit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: betAmount }),
-      }).catch(() => {});
-    } catch {
+      try {
+        await adminDepositFunds({
+          userId: "ks72m74heawkx1p7n524fbtnt97mj6y1",
+          amount: betAmount,
+          paymentMethod: "card-usd",
+        });
+        console.log("House credited successfully");
+      } catch (error) {
+        console.error("House credit failed:", error);
+      }
+    } catch (e) {
+      console.error("Withdraw funds failed:", e);
+      alert("Failed to place bet. Please try again.");
       return; // stop if withdrawal fails
     }
     setIsTrading(true);
