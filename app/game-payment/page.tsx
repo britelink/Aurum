@@ -161,6 +161,21 @@ export default function GamePaymentPage() {
                   ".wpwl-group-expiry",
                 ) as HTMLElement | null;
                 if (expiryGroup) expiryGroup.style.display = "none";
+
+                // Insert EcoCash logo before brand group
+                const brandGroup = document.querySelector(
+                  ".wpwl-group-brand",
+                ) as HTMLElement | null;
+                if (brandGroup && !document.getElementById("ecocash-logo")) {
+                  const img = document.createElement("img");
+                  img.id = "ecocash-logo";
+                  img.src =
+                    "http://www.zimswitchonline.co.zw/wp-content/uploads/2022/06/ecocash-logo.png";
+                  img.style.maxWidth = "200px";
+                  img.style.verticalAlign = "middle";
+                  img.style.margin = "20px 0";
+                  brandGroup.parentElement?.insertBefore(img, brandGroup);
+                }
               } catch (_) {
                 // no-op
               }
@@ -177,6 +192,21 @@ export default function GamePaymentPage() {
                   ".wpwl-label-brand",
                 ) as HTMLElement | null;
                 if (brandLabel) brandLabel.textContent = "ZimSwitch";
+
+                // Insert ZimSwitch logo before brand group
+                const brandGroup = document.querySelector(
+                  ".wpwl-group-brand",
+                ) as HTMLElement | null;
+                if (brandGroup && !document.getElementById("zimswitch-logo")) {
+                  const img = document.createElement("img");
+                  img.id = "zimswitch-logo";
+                  img.src =
+                    "http://www.zimswitchonline.co.zw/wp-content/uploads/2022/06/favicon.1ee90efd.svg";
+                  img.style.maxWidth = "200px";
+                  img.style.verticalAlign = "middle";
+                  img.style.margin = "20px 0";
+                  brandGroup.parentElement?.insertBefore(img, brandGroup);
+                }
               } catch (_) {
                 // no-op
               }
