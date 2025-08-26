@@ -633,7 +633,7 @@ export default function TradingChart({
   };
 
   // Correct completeTrade function
-  const completeTrade = () => {
+  const completeTrade = async () => {
     if (!activeTrade) return;
     setIsTrading(false);
 
