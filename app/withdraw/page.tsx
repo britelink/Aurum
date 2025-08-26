@@ -13,10 +13,6 @@ export default function WithdrawPage() {
   const user = useQuery(api.aurum.getCurrentUser);
   const transactions = useQuery(api.aurum.getUserTransactions);
 
-  const [withdrawAmount, setWithdrawAmount] = useState<number>(10);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] =
-    useState<string>("ecocash-usd");
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-100 dark:bg-gray-950 flex items-center justify-center">
@@ -69,24 +65,6 @@ export default function WithdrawPage() {
 
   const lastDeposit = deposits[0]; // Most recent deposit
   const lastWithdrawal = withdrawals[0]; // Most recent withdrawal
-
-  const handleWithdraw = async () => {
-    // For now, route to manual withdrawal instructions without changing balance
-    if (!isEligibleForWithdrawal) {
-      alert("You need at least $10 to make a withdrawal.");
-      return;
-    }
-    if (withdrawAmount < 10) {
-      alert("Minimum withdrawal amount is $10.");
-      return;
-    }
-    if (withdrawAmount > currentBalance) {
-      alert("Insufficient balance for this withdrawal amount.");
-      return;
-    }
-
-    window.location.href = "/withdraw/manual";
-  };
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-gray-950">
@@ -149,85 +127,59 @@ export default function WithdrawPage() {
           {/* Withdrawal Action */}
           <Card>
             <CardHeader>
-              <CardTitle>Withdraw Funds</CardTitle>
+              <CardTitle>Manual Withdrawal Process</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                    Withdrawal Requirements
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg">
+                  <h4 className="font-medium text-yellow-900 dark:text-yellow-100 mb-2">
+                    ⚠️ Automated Withdrawals Temporarily Unavailable
                   </h4>
-                  <ul className="text-sm text-blue-700 dark:text-blue-200 space-y-1">
-                    <li>• Minimum withdrawal amount: $10.00</li>
-                    <li>• Maximum withdrawal amount: $1,000.00 per day</li>
-                    <li>• Processing time: 24-48 hours</li>
-                    <li>• Available payment methods: EcoCash, Bank Transfer</li>
-                  </ul>
+                  <p className="text-sm text-yellow-700 dark:text-yellow-200">
+                    We are currently processing withdrawals manually to ensure
+                    your funds are safe and secure.
+                  </p>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Withdrawal Amount
-                    </label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                      <input
-                        type="number"
-                        min="10"
-                        max={Math.min(1000, currentBalance)}
-                        value={withdrawAmount}
-                        onChange={(e) =>
-                          setWithdrawAmount(Number(e.target.value))
-                        }
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100"
-                        placeholder="Enter amount"
-                      />
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Available: ${currentBalance.toFixed(2)} | Max: $
-                      {Math.min(1000, currentBalance).toFixed(2)}
-                    </p>
-                  </div>
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                    Manual Withdrawal Steps
+                  </h4>
+                  <ol className="text-sm text-blue-700 dark:text-blue-200 space-y-2 list-decimal list-inside">
+                    <li>Ensure you have at least $10.00 in your account</li>
+                    <li>Prepare your EcoCash mobile number and National ID</li>
+                    <li>Contact our support team via email</li>
+                    <li>Provide your account details and withdrawal amount</li>
+                    <li>Wait for confirmation and processing (24-48 hours)</li>
+                  </ol>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Payment Method
-                    </label>
-                    <select
-                      value={selectedPaymentMethod}
-                      onChange={(e) => setSelectedPaymentMethod(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100"
-                    >
-                      <option value="ecocash-usd">EcoCash (USD)</option>
-                      <option value="ecocash-zwg">EcoCash (ZWG)</option>
-                      <option value="zimswitch-usd">Zimswitch (USD)</option>
-                      <option value="zimswitch-zwg">Zimswitch (ZWG)</option>
-                    </select>
+                <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                  <h4 className="font-medium text-green-900 dark:text-green-100 mb-2">
+                    Contact Information
+                  </h4>
+                  <div className="text-sm text-green-700 dark:text-green-200 space-y-1">
+                    <p>
+                      <strong>Email:</strong> pennygameinfo@gmail.com
+                    </p>
+                    <p>
+                      <strong>Office:</strong> 123 Example Street, Harare
+                    </p>
+                    <p>
+                      <strong>Processing Time:</strong> 24-48 hours
+                    </p>
                   </div>
                 </div>
 
                 <Button
-                  onClick={handleWithdraw}
-                  disabled={
-                    !isEligibleForWithdrawal ||
-                    withdrawAmount < 10 ||
-                    withdrawAmount > currentBalance
+                  onClick={() =>
+                    (window.location.href = "mailto:pennygameinfo@gmail.com")
                   }
                   className="w-full"
                   size="lg"
                 >
-                  {isEligibleForWithdrawal ? (
-                    <>
-                      <DollarSign className="w-4 h-4 mr-2" />
-                      Withdraw ${withdrawAmount.toFixed(2)}
-                    </>
-                  ) : (
-                    <>
-                      <DollarSign className="w-4 h-4 mr-2" />
-                      Withdraw ${withdrawAmount.toFixed(2)}
-                    </>
-                  )}
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  Contact Support for Withdrawal
                 </Button>
               </div>
             </CardContent>
