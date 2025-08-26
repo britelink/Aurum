@@ -442,6 +442,12 @@ export default function TradingChart({
     setSessionPlayers([...filteredPlayers, ...aiPlayers, userBet]);
     try {
       await withdrawFunds({ amount: betAmount, paymentMethod: "card-usd" });
+      // Credit house with the stake
+      fetch("/api/house/credit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: betAmount }),
+      }).catch(() => {});
     } catch (e) {
       return; // stop if withdrawal fails
     }
@@ -746,11 +752,23 @@ export default function TradingChart({
         amount: activeTrade.amount + userWinAmount,
         paymentMethod: "card-usd",
       });
+      // Debit house by the payout amount (stake + profit)
+      fetch("/api/house/debit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: activeTrade.amount + userWinAmount }),
+      }).catch(() => {});
     } else if (result.isNeutral) {
       await depositFunds({
         amount: activeTrade.amount,
         paymentMethod: "card-usd",
       });
+      // Neutral: return player stake; also debit house to return stake back
+      fetch("/api/house/debit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: activeTrade.amount }),
+      }).catch(() => {});
     }
 
     const endPrice = finalPrice; // Use our forced final price

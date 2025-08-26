@@ -85,12 +85,7 @@ export default function Header() {
           >
             About
           </Link>
-          <a
-            href="/demo"
-            className="text-blue-100 hover:text-amber-400 dark:text-blue-200 dark:hover:text-amber-300 transition-colors duration-200"
-          >
-            Demo
-          </a>
+
           <a
             href="#"
             className="text-blue-100 hover:text-amber-400 dark:text-blue-200 dark:hover:text-amber-300 transition-colors duration-200"

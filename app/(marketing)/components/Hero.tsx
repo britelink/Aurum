@@ -56,19 +56,6 @@ export default function Hero({
                   {ctaText}
                 </AurumButton>
               </Link>
-
-              {secondaryCta && (
-                <Link href="/demo">
-                  <AurumButton
-                    variant="outline"
-                    size="lg"
-                    onClick={secondaryCtaAction}
-                    className="border-blue-300 text-blue-100 hover:bg-blue-800/50"
-                  >
-                    {secondaryCta}
-                  </AurumButton>
-                </Link>
-              )}
             </div>
 
             {/* Market metrics */}
