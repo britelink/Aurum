@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-
 "use client";
 import React, { useEffect, useState, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
@@ -207,7 +205,7 @@ export default function TradingChart({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isTrading, activeTrade, sessionTime]);
+  }, [isTrading, activeTrade, sessionTime, completeTrade]);
 
   // Update bet imbalance whenever sessionPlayers changes
   useEffect(() => {
@@ -448,7 +446,7 @@ export default function TradingChart({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: betAmount }),
       }).catch(() => {});
-    } catch (e) {
+    } catch {
       return; // stop if withdrawal fails
     }
     setIsTrading(true);

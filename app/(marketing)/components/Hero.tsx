@@ -8,8 +8,6 @@ interface HeroProps {
   subtitle: string;
   ctaText?: string;
   ctaAction?: () => void;
-  secondaryCta?: string;
-  secondaryCtaAction?: () => void;
   showChart?: boolean;
 }
 
@@ -18,8 +16,6 @@ export default function Hero({
   subtitle,
   ctaText = "Start Playing",
   ctaAction,
-  secondaryCta,
-  secondaryCtaAction,
   showChart = true,
 }: HeroProps) {
   return (

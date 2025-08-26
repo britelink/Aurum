@@ -13,7 +13,6 @@ export default function WithdrawPage() {
   const user = useQuery(api.aurum.getCurrentUser);
   const transactions = useQuery(api.aurum.getUserTransactions);
 
-  const [isProcessing, setIsProcessing] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState<number>(10);
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<string>("ecocash-usd");
@@ -212,17 +211,16 @@ export default function WithdrawPage() {
                   onClick={handleWithdraw}
                   disabled={
                     !isEligibleForWithdrawal ||
-                    isProcessing ||
                     withdrawAmount < 10 ||
                     withdrawAmount > currentBalance
                   }
                   className="w-full"
                   size="lg"
                 >
-                  {isProcessing ? (
+                  {isEligibleForWithdrawal ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Processing...
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Withdraw ${withdrawAmount.toFixed(2)}
                     </>
                   ) : (
                     <>
