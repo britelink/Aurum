@@ -86,7 +86,7 @@ export const depositFunds = mutation({
     try {
       // Update existing user's balance
       await ctx.db.patch(userId, {
-        balance: (user.balance || 0) + args.amount,
+        balance: Math.round(((user.balance || 0) + args.amount) * 100) / 100,
       });
       console.log("Successfully updated balance");
 
@@ -141,7 +141,7 @@ export const adminDepositFunds = mutation({
     try {
       // Update existing user's balance
       await ctx.db.patch(userId, {
-        balance: (user.balance || 0) + args.amount,
+        balance: Math.round(((user.balance || 0) + args.amount) * 100) / 100,
       });
       console.log("Successfully updated balance");
 
@@ -195,7 +195,7 @@ export const withdrawFunds = mutation({
     try {
       // Update user's balance
       await ctx.db.patch(userId, {
-        balance: (user.balance || 0) - args.amount,
+        balance: Math.round(((user.balance || 0) - args.amount) * 100) / 100,
       });
       console.log("Successfully updated balance");
 
@@ -250,7 +250,7 @@ export const adminWithdrawFunds = mutation({
     try {
       // Update user's balance
       await ctx.db.patch(userId, {
-        balance: (user.balance || 0) - args.amount,
+        balance: Math.round(((user.balance || 0) - args.amount) * 100) / 100,
       });
       console.log("Successfully updated balance");
 

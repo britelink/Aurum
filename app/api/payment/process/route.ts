@@ -89,8 +89,9 @@ async function processPayment(req: NextRequest) {
       console.log("Amount type:", typeof amount);
 
       // Normalize amount: if gateway sends cents (integer, no decimal), convert to dollars
-      const rawAmount = (statusResponse.data as any)?.amount as string;
-      if (rawAmount && !rawAmount.includes(".")) {
+      type GatewayData = { amount?: string };
+      const rawAmount = (statusResponse.data as GatewayData)?.amount;
+      if (typeof rawAmount === "string" && !rawAmount.includes(".")) {
         console.log(
           "Amount appears to be cents (no decimal point). Converting to dollars.",
         );
