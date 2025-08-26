@@ -2,6 +2,8 @@
 
 "use client";
 import React, { useEffect, useState, useRef } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import {
   BetPosition,
   BetAmount,
@@ -34,7 +36,10 @@ export default function TradingChart({
   const chartRef = useRef<HTMLDivElement>(null);
 
   // State from PriceSimulator
-  const [balance, setBalance] = useState(1000);
+  const currentUser = useQuery(api.aurum.getCurrentUser);
+  const serverBalance = currentUser?.balance || 0;
+  const withdrawFunds = useMutation(api.aurum.withdrawFunds);
+  const depositFunds = useMutation(api.aurum.depositFunds);
   const [betAmount, setBetAmount] = useState<BetAmount>(1);
   const [sessionPlayers, setSessionPlayers] = useState<Player[]>([]);
   const [sessionResult, setSessionResult] = useState<SessionResult | null>(
@@ -420,7 +425,7 @@ export default function TradingChart({
 
   // Function to place a bet - renamed for clarity
   const placeBet = async (position: BetPosition) => {
-    if (isTrading || balance < betAmount) return;
+    if (isTrading || serverBalance < betAmount) return;
 
     // Remove any existing bets by this player
     const filteredPlayers = sessionPlayers.filter((p) => p.id !== userPlayerId);
@@ -435,7 +440,11 @@ export default function TradingChart({
     // Generate random number of AI players (0-15)
     const aiPlayers = generateRandomAIPlayers(0, 15, position);
     setSessionPlayers([...filteredPlayers, ...aiPlayers, userBet]);
-    setBalance((prev) => prev - betAmount);
+    try {
+      await withdrawFunds({ amount: betAmount, paymentMethod: "card-usd" });
+    } catch (e) {
+      return; // stop if withdrawal fails
+    }
     setIsTrading(true);
 
     // Initialize trade path with entry point
@@ -733,11 +742,15 @@ export default function TradingChart({
     if (userWon && !result.isNeutral) {
       const userWinAmount =
         result.winners.find((w) => w.playerId === userPlayerId)?.profit || 0;
-      // Add original bet amount back plus profit
-      setBalance((prev) => prev + activeTrade.amount + userWinAmount);
+      await depositFunds({
+        amount: activeTrade.amount + userWinAmount,
+        paymentMethod: "card-usd",
+      });
     } else if (result.isNeutral) {
-      // Return original bet in case of a tie
-      setBalance((prev) => prev + activeTrade.amount);
+      await depositFunds({
+        amount: activeTrade.amount,
+        paymentMethod: "card-usd",
+      });
     }
 
     const endPrice = finalPrice; // Use our forced final price
@@ -834,7 +847,7 @@ export default function TradingChart({
             Your Balance
           </div>
           <div className="text-2xl font-bold text-slate-800 dark:text-white">
-            ${balance.toFixed(2)}
+            ${serverBalance.toFixed(2)}
           </div>
         </div>
         <div className="text-right">
@@ -1038,7 +1051,7 @@ export default function TradingChart({
               isTrading ? "opacity-50 cursor-not-allowed" : ""
             }`}
             onClick={() => placeBet("buy")}
-            disabled={isTrading || balance < betAmount}
+            disabled={isTrading || serverBalance < betAmount}
           >
             BET UP ↑
           </button>
@@ -1047,7 +1060,7 @@ export default function TradingChart({
               isTrading ? "opacity-50 cursor-not-allowed" : ""
             }`}
             onClick={() => placeBet("sell")}
-            disabled={isTrading || balance < betAmount}
+            disabled={isTrading || serverBalance < betAmount}
           >
             BET DOWN ↓
           </button>
