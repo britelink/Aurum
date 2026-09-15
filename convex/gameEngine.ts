@@ -108,6 +108,19 @@ export const ensureRound = internalMutation({
       .withIndex("by_status", (q) => q.eq("status", "open"))
       .first();
     if (open) {
+      /*
+       * A round left behind by the old engine has no `seed`, and its
+       * `neutralAxis` was an unrelated `Math.random()` rather than a point on
+       * any curve. Settling it would judge real stakes against a line that
+       * never existed, so it is voided and every stake goes back.
+       *
+       * Only ever fires on the first deploy over live data.
+       */
+      if (open.seed === undefined) {
+        await retireLegacyRound(ctx, open._id);
+        const sessionId = await openRound(ctx);
+        return { ok: true as const, sessionId, recovered: "legacy" };
+      }
       if (open.endTime > now) return { ok: true as const, sessionId: open._id };
       // Its `closeBetting` never fired (a deploy, an error). Run it now rather
       // than leaving a round that takes bets forever.
@@ -122,6 +135,11 @@ export const ensureRound = internalMutation({
       .withIndex("by_status", (q) => q.eq("status", "processing"))
       .first();
     if (processing) {
+      if (processing.seed === undefined) {
+        await retireLegacyRound(ctx, processing._id);
+        const sessionId = await openRound(ctx);
+        return { ok: true as const, sessionId, recovered: "legacy" };
+      }
       if (processing.processingEndTime > now) {
         return { ok: true as const, sessionId: processing._id };
       }
@@ -281,6 +299,35 @@ export const settleRound = internalMutation({
     };
   },
 });
+
+/**
+ * Close out a round the old engine left behind, returning every stake.
+ *
+ * Under the old engine `placeBet` never debited, so most legacy bets cost their
+ * player nothing and refunding them would be a gift. `refundStake` is used
+ * anyway: it credits `bet.amount`, and the alternative — deciding per row
+ * whether a stake was ever actually taken — cannot be answered from the data,
+ * because the debit that would prove it was never written. Paying a handful of
+ * dollars once, on one deploy, is the cheap side of that uncertainty; the
+ * expensive side is a player who really did stake and gets nothing back.
+ */
+async function retireLegacyRound(
+  ctx: MutationCtx,
+  sessionId: Id<"sessions">,
+): Promise<void> {
+  const bets = await ctx.db
+    .query("bets")
+    .withIndex("by_session", (q) => q.eq("sessionId", sessionId))
+    .take(200);
+  for (const bet of bets) {
+    await refundStake(ctx, bet, "Round voided: engine upgrade");
+  }
+  await ctx.db.patch(sessionId, {
+    status: "closed",
+    winner: "neutral",
+    houseFee: 0,
+  });
+}
 
 /** Stake back, bet marked void. */
 async function refundStake(
