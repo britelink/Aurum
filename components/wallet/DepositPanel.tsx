@@ -17,7 +17,7 @@
  */
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,9 +39,22 @@ export default function DepositPanel() {
   const createDeposit = useMutation(api.deposits.createDeposit);
   const cancelDeposit = useMutation(api.deposits.cancelDeposit);
 
+  const topUpWithEcocash = useAction(api.buyCrypto.topUpWithEcocash);
+
   const [amount, setAmount] = useState("10");
   const [asset, setAsset] = useState("USDT");
   const [busy, setBusy] = useState(false);
+  const [phone, setPhone] = useState("");
+  /*
+   * Two ways to fund the same deposit.
+   *
+   * "send" quotes an address and waits for the player's own transfer.
+   * "ecocash" asks SGX to make that identical transfer on their behalf, so
+   * somebody holding no crypto at all can still sit down at the table. Both end
+   * at the same watcher and the same credit — the tab only decides who sends
+   * the USDT.
+   */
+  const [route, setRoute] = useState<"send" | "ecocash">("send");
 
   if (rail === undefined || open === undefined) {
     return <PanelSpinner />;
@@ -79,7 +92,15 @@ export default function DepositPanel() {
     }
     setBusy(true);
     try {
-      await createDeposit({ amount: n, asset });
+      if (route === "ecocash") {
+        const out = await topUpWithEcocash({ amount: n, payerPhone: phone });
+        toast.success(
+          `Approve $${out.fiatAmount.toFixed(2)} on ${out.payerPhone} — ref ${out.referenceNumber}`,
+          { duration: 8000 },
+        );
+      } else {
+        await createDeposit({ amount: n, asset });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not start that deposit";
       toast.error(msg.split("\n").pop() ?? msg);
@@ -120,6 +141,37 @@ export default function DepositPanel() {
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-2">
+        <RouteTab
+          active={route === "send"}
+          onClick={() => setRoute("send")}
+          title="Send crypto"
+          subtitle="You already hold USDT"
+        />
+        <RouteTab
+          active={route === "ecocash"}
+          onClick={() => setRoute("ecocash")}
+          title="Pay with EcoCash"
+          subtitle="No crypto needed"
+        />
+      </div>
+
+      {route === "ecocash" && (
+        <div className="space-y-2">
+          <Label htmlFor="onramp-phone">EcoCash number</Label>
+          <Input
+            id="onramp-phone"
+            placeholder="0771234567"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+          <p className="text-xs text-slate-500">
+            You approve the payment on your phone. The USDT is bought and sent to
+            your deposit for you — nothing to copy, nothing to send.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         {[5, 10, 25, 50].map((v) => (
           <button
@@ -134,20 +186,46 @@ export default function DepositPanel() {
 
       <dl className="space-y-1.5 rounded-lg bg-slate-50 p-4 text-sm dark:bg-gray-800/50">
         <Row label="Network" value={rail.chain} />
-        <Row
-          label="Deposit fee"
-          value={rail.feePercent === 0 ? "None" : `${rail.feePercent}%`}
-          highlight={rail.feePercent === 0}
-        />
+        {route === "ecocash" ? (
+          <>
+            {/*
+              SGX takes 2% off the fiat, so the figure that *delivers* the
+              amount is amount/(1-0.02), not amount*1.02. Both numbers are
+              shown: the one leaving their EcoCash and the one landing in the
+              balance. Quoting only the second is how a player discovers a fee
+              at the moment they can no longer decline it.
+            */}
+            <Row
+              label="You pay on EcoCash"
+              value={`$${(Math.round(((Number(amount) || 0) / 0.98 + 0.005) * 100) / 100).toFixed(2)}`}
+            />
+            <Row
+              label="Credited to your balance"
+              value={`$${(Number(amount) || 0).toFixed(2)}`}
+              highlight
+            />
+          </>
+        ) : (
+          <Row
+            label="Deposit fee"
+            value={rail.feePercent === 0 ? "None" : `${rail.feePercent}%`}
+            highlight={rail.feePercent === 0}
+          />
+        )}
         <Row
           label="Credited after"
           value={`${rail.requiredConfirmations} confirmations (~1–3 min)`}
         />
       </dl>
 
-      <Button onClick={submit} disabled={busy} className="w-full" size="lg">
+      <Button
+        onClick={submit}
+        disabled={busy || (route === "ecocash" && phone.trim().length < 9)}
+        className="w-full"
+        size="lg"
+      >
         {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Get deposit address
+        {route === "ecocash" ? "Pay with EcoCash" : "Get deposit address"}
       </Button>
     </div>
   );
@@ -289,6 +367,32 @@ function CopyField(props: {
       </div>
       {props.hint && <p className="text-xs text-slate-500">{props.hint}</p>}
     </div>
+  );
+}
+
+function RouteTab(props: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <button
+      onClick={props.onClick}
+      className={cn(
+        "rounded-lg border p-3 text-left transition-colors",
+        props.active
+          ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
+          : "border-slate-200 text-slate-600 hover:border-slate-300 dark:border-gray-700 dark:text-slate-300",
+      )}
+    >
+      <div className="font-medium">{props.title}</div>
+      <div
+        className={cn("text-xs", props.active ? "opacity-70" : "text-slate-400")}
+      >
+        {props.subtitle}
+      </div>
+    </button>
   );
 }
 

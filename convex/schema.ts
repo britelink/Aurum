@@ -194,6 +194,19 @@ export default defineSchema({
     /** Set when a transfer arrived after `expiresAt` but inside the late window. */
     claimedAfterExpiry: v.optional(v.boolean()),
     creditedTransactionId: v.optional(v.id("transactions")),
+    /**
+     * Set when the player bought this deposit with EcoCash instead of sending
+     * crypto themselves. The on-ramp delivers the tagged payable amount to the
+     * agent wallet, so the ordinary watcher credits it — there is no second
+     * crediting path, which is the whole point of routing it this way.
+     */
+    onrampProvider: v.optional(v.string()), // "chessa_ecocash"
+    onrampReference: v.optional(v.string()), // Pesepay reference the payer sees
+    onrampOrderId: v.optional(v.string()),
+    onrampFiatAmount: v.optional(v.number()),
+    onrampPhone: v.optional(v.string()),
+    onrampStatus: v.optional(v.string()), // initiated | failed
+    onrampError: v.optional(v.string()),
     expiresAt: v.number(),
     paidAt: v.optional(v.number()),
     createdAt: v.number(),

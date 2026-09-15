@@ -11,6 +11,8 @@
 import type * as aurum from "../aurum.js";
 import type * as auth from "../auth.js";
 import type * as britelinkSgx from "../britelinkSgx.js";
+import type * as buyCrypto from "../buyCrypto.js";
+import type * as buyCryptoInternal from "../buyCryptoInternal.js";
 import type * as chessaBridge from "../chessaBridge.js";
 import type * as crons from "../crons.js";
 import type * as cryptoPayoutNode from "../cryptoPayoutNode.js";
@@ -43,6 +45,8 @@ declare const fullApi: ApiFromModules<{
   aurum: typeof aurum;
   auth: typeof auth;
   britelinkSgx: typeof britelinkSgx;
+  buyCrypto: typeof buyCrypto;
+  buyCryptoInternal: typeof buyCryptoInternal;
   chessaBridge: typeof chessaBridge;
   crons: typeof crons;
   cryptoPayoutNode: typeof cryptoPayoutNode;
