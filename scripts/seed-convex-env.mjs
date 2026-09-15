@@ -27,6 +27,9 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
@@ -80,6 +83,37 @@ function fingerprint(value) {
 
 const SECRET = /KEY|SECRET|TOKEN|PASSWORD/i;
 
+/**
+ * The address the agent key actually controls.
+ *
+ * Computed rather than looked up, because the two are things that can disagree
+ * and the disagreement is silent: the payout path asserts the key against the
+ * configured address and refuses to send when they differ, so a wrong address
+ * here does not corrupt anything — it just stops every withdrawal, with an
+ * error that blames the key.
+ *
+ * Returns null if ethers is unavailable or the key is malformed; the caller
+ * then simply leaves the variable unset, which is a safe default.
+ */
+let derivedAgentAddress;
+function deriveAgentAddress() {
+  if (derivedAgentAddress !== undefined) return derivedAgentAddress;
+  const key = pick(
+    "AURUM_AGENT_PRIVATE_KEY",
+    "PENNY_TREASURY_BEP20_PRIVATE_KEY",
+    "PRIVATE_KEY",
+  );
+  if (!key) return (derivedAgentAddress = null);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Wallet } = require("ethers");
+    const normalised = key.startsWith("0x") ? key : `0x${key}`;
+    return (derivedAgentAddress = new Wallet(normalised).address);
+  } catch {
+    return (derivedAgentAddress = null);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // What Aurum's Convex actually reads. Keep this list in step with the code —
 // if a module starts reading a new variable, it belongs here on the same commit.
@@ -95,16 +129,37 @@ const PLAN = [
     why: "Signs payouts AND derives the address deposits are watched on. Without it neither rail runs.",
   },
   {
+    /*
+     * Derived from the key, never copied from another wallet.
+     *
+     * `PENNY_ONRAMP_WALLET_BEP20` used to be mapped here and it is the wrong
+     * wallet: on this deployment it is a *different* address that no key in the
+     * env unlocks. Setting it would have made `cryptoPayoutNode` refuse every
+     * payout with "private key does not match" — the safety check working, but
+     * firing on a configuration mistake made by the tool that was supposed to
+     * prevent one. The agent wallet is by definition the one we can sign from.
+     */
     name: "AURUM_AGENT_WALLET_ADDRESS",
-    from: () => pick("AURUM_AGENT_WALLET_ADDRESS", "PENNY_ONRAMP_WALLET_BEP20", "PENNY_TREASURY_BEP20_ADDRESS"),
+    from: () =>
+      pick("AURUM_AGENT_WALLET_ADDRESS", "PENNY_TREASURY_BEP20_ADDRESS") ??
+      deriveAgentAddress(),
     required: false,
     why: "Asserted against the key before any transfer — a mismatch means the wrong wallet is about to pay out.",
   },
   {
+    /*
+     * Defaults to the agent wallet so `/wallet` can quote a deposit on a fresh
+     * deployment. Without it the address is only known after the watcher's
+     * first successful tick, and until then every deposit attempt is refused
+     * with "not configured yet" — which looks like a broken product rather
+     * than a cold start.
+     */
     name: "AURUM_DEPOSIT_ADDRESS",
-    from: () => pick("AURUM_DEPOSIT_ADDRESS", "SGX_INBOUND_DEPOSIT_ADDRESS"),
+    from: () =>
+      pick("AURUM_DEPOSIT_ADDRESS", "SGX_INBOUND_DEPOSIT_ADDRESS") ??
+      deriveAgentAddress(),
     required: false,
-    why: "Only if inbound should land somewhere other than the signing wallet. Also lets the first deposit be quoted before the watcher has ever run.",
+    why: "Where inbound lands. Defaults to the signing wallet; set it only if deposits should go elsewhere.",
   },
   {
     name: "AURUM_BSC_RPC_URL",
@@ -233,10 +288,29 @@ async function generateAuthKeys() {
   };
 }
 
+const IS_WIN = process.platform === "win32";
+
+/**
+ * Quote one argument for the shell this is about to go through.
+ *
+ * `npx` is a `.cmd` on Windows and modern Node refuses to spawn one without a
+ * shell — and a shell joins the argv array back into a single string, which
+ * shreds any value containing a space. Two variables here always do:
+ * `PENNY_WITHDRAW_CHAIN` is "BNB Smart Chain (BEP20)", which arrived as five
+ * arguments, and `JWT_PRIVATE_KEY` starts with `-----BEGIN`, which the CLI's
+ * option parser read as a flag.
+ */
+function shellQuote(arg) {
+  if (!IS_WIN) return `'${String(arg).replace(/'/g, `'\\''`)}'`;
+  return `"${String(arg).replace(/"/g, '\\"')}"`;
+}
+
 function convexEnvSet(name, value) {
-  const args = ["convex", "env", "set", name, value];
+  // `--` ends option parsing, so a value that begins with a dash is a value.
+  const args = ["convex", "env", "set"];
   if (PROD) args.push("--prod");
-  const res = spawnSync("npx", args, { stdio: "inherit", shell: process.platform === "win32" });
+  args.push("--", shellQuote(name), shellQuote(value));
+  const res = spawnSync("npx", args, { stdio: "inherit", shell: true });
   return res.status === 0;
 }
 

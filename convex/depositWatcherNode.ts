@@ -26,6 +26,7 @@
  *    addresses. SGX had 695 USDT stranded at a retired address when this rule
  *    was written.
  */
+import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -42,6 +43,18 @@ import {
 const LAST_BLOCK_KEY = "watcherLastBlock";
 const DEPOSIT_ADDRESS_KEY = "depositAddress";
 const DEPOSIT_ADDRESS_HISTORY_KEY = "depositAddressHistory";
+/**
+ * Block ranges the watcher advanced past without reading, as a JSON array of
+ * `{ from, to, reason, at }`.
+ *
+ * Skipping is normally forbidden here — the whole cursor discipline above
+ * exists to guarantee no range is ever missed. There is exactly one case where
+ * refusing to skip is worse: an endpoint that *cannot* serve a range, ever.
+ * See `ARCHIVE_GATED` below. When that happens the range is recorded here
+ * rather than silently dropped, so a deposit that fell in the gap can be found
+ * and credited by hand once a proper endpoint is configured.
+ */
+const SKIPPED_RANGES_KEY = "watcherSkippedRanges";
 
 /** Never scan more than this many blocks in one tick. */
 const MAX_BLOCK_SPAN = 20_000;
@@ -67,6 +80,37 @@ const isLive = process.env.IS_LIVE === "true";
 const TOKENS = tokenAddresses(isLive);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * How close to the head a gated endpoint will still serve.
+ *
+ * Free tiers serve "recent" blocks and refuse anything they consider archive.
+ * ~2,500 BSC blocks is roughly half an hour, comfortably inside every free
+ * window measured, and far more than the few minutes a deposit needs.
+ */
+const RECENT_WINDOW = 2_500;
+
+/**
+ * Does this error mean "never, on this endpoint" rather than "not right now"?
+ *
+ * The distinction decides whether skipping a range is a bug or the only way to
+ * stay alive. A rate limit is temporary and retrying is correct. An archive
+ * refusal is permanent for that range on that endpoint: every retry, this tick
+ * and every future tick, returns the same answer. Grinding on it does not
+ * eventually succeed — it pins the cursor forever, so the watcher also stops
+ * seeing every *future* deposit. Being stuck in the past is strictly worse than
+ * a recorded gap.
+ */
+function isArchiveGated(e: unknown): boolean {
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return (
+    msg.includes("archive") ||
+    msg.includes("personal token") ||
+    // Some providers answer a too-old range with a bare "block range too large"
+    // / "exceeds limit" even for one block, which is the same situation.
+    (msg.includes("-32602") && msg.includes("block"))
+  );
+}
 
 /**
  * Reject if an endpoint has not answered in time.
@@ -233,12 +277,18 @@ export const watchInboundDeposits = internalAction({
       data: string;
     };
 
-    /** One `eth_getLogs`, retried with backoff. Null means the chunk failed. */
+    /**
+     * One `eth_getLogs`, retried with backoff.
+     *
+     * `null` means "failed, try again next tick"; `"unservable"` means this
+     * endpoint will never answer for this range, so retrying is wasted and the
+     * caller has to decide what to do about the gap.
+     */
     const getLogs = async (
       tokenAddress: string,
       a: number,
       b: number,
-    ): Promise<Log[] | null> => {
+    ): Promise<Log[] | null | "unservable"> => {
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
           return (await provider!.getLogs({
@@ -248,6 +298,8 @@ export const watchInboundDeposits = internalAction({
             topics: [transferTopic, null, toTopics],
           })) as never;
         } catch (e) {
+          // Fail fast: an archive refusal is the same on attempt four.
+          if (isArchiveGated(e)) return "unservable";
           if (attempt === MAX_ATTEMPTS) {
             console.warn(
               `[aurum-rail] watcher: getLogs ${a}-${b} failed after ${attempt} attempts`,
@@ -261,10 +313,37 @@ export const watchInboundDeposits = internalAction({
       return null;
     };
 
+    /** Record a range we advanced past without reading, so it can be backfilled. */
+    const recordSkip = async (from: number, to: number, reason: string) => {
+      const raw = (await ctx.runQuery(internal.deposits.getConfig, {
+        key: SKIPPED_RANGES_KEY,
+      })) as string | null;
+      let ranges: unknown[] = [];
+      try {
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(parsed)) ranges = parsed;
+      } catch {
+        ranges = [];
+      }
+      ranges.push({ from, to, reason, at: Date.now() });
+      // Keep the record bounded; the oldest gaps are the least actionable.
+      await ctx.runMutation(internal.deposits.setConfig, {
+        key: SKIPPED_RANGES_KEY,
+        value: JSON.stringify(ranges.slice(-50)),
+      });
+      console.error(
+        `[aurum-rail] watcher: SKIPPED blocks ${from}-${to} (${reason}). ` +
+          "Any deposit in this range was NOT credited. Configure an archive-capable " +
+          "AURUM_BSC_RPC_URL and backfill with depositWatcherNode:rescanRange.",
+      );
+    };
+
     let matched = 0;
     let unmatched = 0;
     let cursor = fromBlock - 1;
     let stoppedEarly = false;
+    /** Set when a range was advanced past unread; surfaced in the return value. */
+    let skippedTo: number | null = null;
 
     for (let a = fromBlock; a <= targetBlock; a += CHUNK_SIZE) {
       const b = Math.min(a + CHUNK_SIZE - 1, targetBlock);
@@ -273,14 +352,50 @@ export const watchInboundDeposits = internalAction({
       // on one token cannot advance the cursor past a range the others missed.
       const perToken: Array<{ symbol: string; logs: Log[] }> = [];
       let chunkOk = true;
+      let unservable = false;
       for (const symbol of RAIL_ASSETS) {
         const logs = await getLogs(TOKENS[symbol], a, b);
+        if (logs === "unservable") {
+          unservable = true;
+          break;
+        }
         if (logs === null) {
           chunkOk = false;
           break;
         }
         perToken.push({ symbol, logs });
       }
+
+      /*
+       * The endpoint will not serve this far back, ever. Jump the cursor to the
+       * window it *will* serve, in one move rather than crawling chunk by chunk
+       * through refusals, and record the whole gap.
+       *
+       * This is the one place the watcher skips blocks, and it is the lesser
+       * evil: the alternative is a cursor frozen in the past, which misses the
+       * skipped range *and* everything after it, forever, while reporting
+       * nothing but a warning a minute.
+       */
+      if (unservable) {
+        const resumeAt = Math.max(a, latestBlock - RECENT_WINDOW);
+        if (resumeAt > a) {
+          await recordSkip(a, resumeAt - 1, "endpoint refuses archive range");
+          cursor = resumeAt - 1;
+          await ctx.runMutation(internal.deposits.setConfig, {
+            key: LAST_BLOCK_KEY,
+            value: String(cursor),
+          });
+          skippedTo = cursor;
+          // Restart the loop from the servable window.
+          a = resumeAt - CHUNK_SIZE;
+          continue;
+        }
+        // Already inside the recent window and still refused — that is a real
+        // outage, not a history limit. Stop and let the next tick retry.
+        stoppedEarly = true;
+        break;
+      }
+
       if (!chunkOk) {
         stoppedEarly = true;
         break;
@@ -367,7 +482,129 @@ export const watchInboundDeposits = internalAction({
       unmatched,
       confirmed,
       stoppedEarly,
+      skippedTo,
     };
+  },
+});
+
+/**
+ * Re-read one explicit block range, without touching the cursor.
+ *
+ * The backfill for a gap recorded in `watcherSkippedRanges`: point
+ * `AURUM_BSC_RPC_URL` at an archive-capable endpoint, then
+ *
+ *   npx convex run depositWatcherNode:rescanRange '{"fromBlock":N,"toBlock":M}'
+ *
+ * Safe to run repeatedly — transfers are deduped by tx hash, so a range that
+ * was already credited produces nothing the second time.
+ */
+export const rescanRange = internalAction({
+  args: { fromBlock: v.number(), toBlock: v.number() },
+  handler: async (ctx, { fromBlock, toBlock }) => {
+    const { ethers } = await import("ethers");
+    if (toBlock < fromBlock) throw new Error("toBlock is before fromBlock");
+
+    const historyRaw = (await ctx.runQuery(internal.deposits.getConfig, {
+      key: DEPOSIT_ADDRESS_HISTORY_KEY,
+    })) as string | null;
+    let watched: string[] = [];
+    try {
+      const parsed = historyRaw ? JSON.parse(historyRaw) : [];
+      if (Array.isArray(parsed)) {
+        watched = parsed.filter((x): x is string => typeof x === "string");
+      }
+    } catch {
+      watched = [];
+    }
+    if (watched.length === 0) {
+      const override = process.env.AURUM_DEPOSIT_ADDRESS?.trim();
+      const key = agentPrivateKey();
+      const addr =
+        override && /^0x[a-fA-F0-9]{40}$/.test(override)
+          ? override
+          : key
+            ? new ethers.Wallet(key).address
+            : null;
+      if (!addr) throw new Error("No deposit address configured");
+      watched = [ethers.getAddress(addr)];
+    }
+
+    let provider: InstanceType<typeof ethers.JsonRpcProvider> | null = null;
+    let latestBlock = 0;
+    for (const url of bscRpcUrls(isLive)) {
+      try {
+        const candidate = new ethers.JsonRpcProvider(url);
+        latestBlock = await withEndpointDeadline(
+          candidate.getBlockNumber(),
+          6000,
+          new URL(url).host,
+        );
+        provider = candidate;
+        break;
+      } catch {
+        /* try the next one */
+      }
+    }
+    if (!provider) throw new Error("No reachable RPC endpoint");
+
+    const transferTopic = ethers.id("Transfer(address,address,uint256)");
+    const toTopics = watched.map((a) => ethers.zeroPadValue(a.toLowerCase(), 32));
+    const iface = new ethers.Interface([
+      "event Transfer(address indexed from, address indexed to, uint256 value)",
+    ]);
+
+    let matched = 0;
+    let scanned = 0;
+    for (let a = fromBlock; a <= toBlock; a += CHUNK_SIZE) {
+      const b = Math.min(a + CHUNK_SIZE - 1, toBlock);
+      for (const symbol of RAIL_ASSETS) {
+        const logs = (await provider.getLogs({
+          fromBlock: a,
+          toBlock: b,
+          address: TOKENS[symbol],
+          topics: [transferTopic, null, toTopics],
+        })) as unknown as Array<{
+          transactionHash: string;
+          blockNumber: number;
+          topics: string[];
+          data: string;
+        }>;
+        for (const log of logs) {
+          const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+          if (!parsed) continue;
+          const seen = (await ctx.runQuery(
+            internal.deposits.isTxAlreadyRecorded,
+            { txHash: log.transactionHash },
+          )) as boolean;
+          if (seen) continue;
+          const amount = roundAmount(
+            parseFloat(
+              ethers.formatUnits(parsed.args.value, KNOWN_DECIMALS[symbol] ?? 18),
+            ),
+          );
+          if (amount < DUST_THRESHOLD) continue;
+          const fromAddress = (parsed.args.from as string).toLowerCase();
+          const deposit = (await ctx.runQuery(
+            internal.deposits.findOpenDepositByAmount,
+            { asset: symbol, amount, fromAddress },
+          )) as Doc<"cryptoDeposits"> | null;
+          if (!deposit) continue;
+          matched++;
+          await ctx.runMutation(internal.deposits.recordDeposit, {
+            depositId: deposit._id,
+            txHash: log.transactionHash,
+            blockNumber: log.blockNumber,
+            amount,
+            fromAddress,
+            confirmations: Math.max(latestBlock - log.blockNumber + 1, 0),
+          });
+        }
+      }
+      scanned = b;
+    }
+
+    const confirmed = await promoteDetected(ctx, latestBlock);
+    return { fromBlock, scannedTo: scanned, matched, confirmed };
   },
 });
 
