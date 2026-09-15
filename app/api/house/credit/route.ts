@@ -1,28 +1,28 @@
-import { NextRequest, NextResponse } from "next/server";
-import { ConvexHttpClient } from "convex/browser";
-import { api } from "@/convex/_generated/api";
-import { getHouseBankUserIdForServer } from "@/lib/house";
+import { NextResponse } from "next/server";
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
-
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const amount = Number(body.amount);
-
-    if (!amount || amount <= 0) {
-      return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
-    }
-
-    await convex.mutation(api.aurum.adminDepositFunds, {
-      userId: getHouseBankUserIdForServer(),
-      amount,
-      paymentMethod: "card-usd",
-    });
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("House credit failed:", error);
-    return NextResponse.json({ error: "House credit failed" }, { status: 500 });
-  }
+/**
+ * Retired.
+ *
+ * This route credited the house balance from an **unauthenticated** POST: no
+ * session, no signature, no shared secret — an amount in a JSON body and the
+ * money appeared. That was survivable only while balances could not leave the
+ * platform. They can now: the outbound rail sends real USDT from the agent
+ * wallet, so any endpoint that can mint a balance can drain the float.
+ *
+ * Manual credits belong to `aurum.adminAdjustBalance`, which requires an
+ * authenticated admin identity and writes an `adminActions` row.
+ *
+ * Safe to delete this file and its `debit` sibling along with `app/api/payment`
+ * and `app/api/withdrawal`; it is left here only as a 410 so anything still
+ * pointing at it fails loudly instead of 404-ing into a retry loop.
+ */
+export async function POST() {
+  return NextResponse.json(
+    {
+      error: "Retired endpoint",
+      detail:
+        "House credits now require an authenticated admin (aurum.adminAdjustBalance).",
+    },
+    { status: 410 },
+  );
 }

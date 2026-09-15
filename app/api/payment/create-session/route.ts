@@ -1,55 +1,23 @@
-// app/api/payment/create-session/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { PaymentService } from "@/lib/payment/service";
-import { CheckoutRequest } from "@/lib/payment/types";
-import { PaymentError, ValidationError } from "@/lib/payment/errors";
+import { NextResponse } from "next/server";
 
-const paymentService = new PaymentService();
-
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-
-    // Validate request
-    if (!body.amount || !body.userId || !body.paymentMethod) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 },
-      );
-    }
-
-    const checkoutRequest: CheckoutRequest = {
-      amount: Number(body.amount),
-      currency: body.currency || "USD",
-      paymentMethod: body.paymentMethod,
-      userId: body.userId,
-      email: body.email,
-    };
-
-    const checkoutResponse =
-      await paymentService.prepareDeposit(checkoutRequest);
-
-    return NextResponse.json({
-      checkoutId: checkoutResponse.id,
-      paymentBrand: checkoutResponse.paymentBrand,
-    });
-  } catch (error) {
-    console.error("Payment session creation failed:", error);
-
-    if (error instanceof PaymentError) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.statusCode || 500 },
-      );
-    }
-
-    if (error instanceof ValidationError) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
-    return NextResponse.json(
-      { error: "Failed to create payment session" },
-      { status: 500 },
-    );
-  }
+/**
+ * Retired — the fiat on-ramp is gone.
+ *
+ * Card, Zimswitch and the hosted EcoCash widget never settled in production,
+ * and the deposit path that replaced them is the on-chain one: `/wallet` quotes
+ * a BEP-20 address and an exact amount, and `depositWatcherNode` credits the
+ * player when the transfer confirms.
+ *
+ * Kept as a 410 rather than deleted so a stale client fails visibly. Delete the
+ * whole of `app/api/payment`, `app/api/withdrawal`, `app/api/house` and
+ * `lib/payment` when nothing points at them.
+ */
+export async function POST() {
+  return NextResponse.json(
+    {
+      error: "Fiat deposits are retired",
+      detail: "Deposit crypto at /wallet — USDT or USDC on BNB Smart Chain.",
+    },
+    { status: 410 },
+  );
 }

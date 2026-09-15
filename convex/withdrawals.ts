@@ -4,25 +4,18 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import {
+  MIN_WITHDRAW_USD,
+  computeWithdrawFee,
+  normalizeE164Zimbabwe,
+  roundMoney,
+} from "./railLib";
 
-const MIN_USD = 0.5;
-
-function roundMoney(n: number) {
-  return Math.round(n * 100) / 100;
-}
-
-function normalizeE164Zimbabwe(raw: string): string {
-  let t = raw.replace(/\s/g, "");
-  if (t.startsWith("00")) t = "+" + t.slice(2);
-  if (t.startsWith("0") && t.length >= 9) t = "+263" + t.slice(1);
-  if (/^263[0-9]{9,}$/.test(t)) t = "+" + t;
-  if (t.startsWith("7") && t.length === 9) t = "+263" + t;
-  if (!t.startsWith("+")) t = `+${t}`;
-  return t;
-}
+const MIN_USD = MIN_WITHDRAW_USD;
 
 export const getPayoutForAction = internalQuery({
   args: { payoutId: v.id("ecocashPayouts") },
@@ -187,8 +180,135 @@ export const markTreasuryFundingSuccess = internalMutation({
 });
 
 /**
- * One-shot: deduct balance, create pending withdrawal + payout row, push to SGX in background.
- * Subscribe with useQuery on ecocashPayouts (getMyPayouts) for live status.
+ * Queue an EcoCash cash-out for a given player.
+ *
+ * Extracted from the public mutation so the rail drill runs this path, not a
+ * copy of it. `dryRun` prices and validates without debiting or queueing —
+ * enough to prove the phone number, the name and the fee are acceptable before
+ * a real remittance is booked at Chessa.
+ */
+export async function queueEcocashPayoutFor(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  args: {
+    amount: number;
+    ecocashPhone: string;
+    firstName: string;
+    lastName: string;
+    idempotencyKey: string;
+    dryRun?: boolean;
+  },
+) {
+  const amount = roundMoney(args.amount);
+  if (amount < MIN_USD) {
+    throw new Error(`Minimum withdrawal is $${MIN_USD}`);
+  }
+
+  const idempotencyKey = args.idempotencyKey.trim();
+  if (!idempotencyKey) throw new Error("idempotencyKey required");
+
+  const existing = await ctx.db
+    .query("ecocashPayouts")
+    .withIndex("by_idempotency", (q) => q.eq("idempotencyKey", idempotencyKey))
+    .first();
+  if (existing) {
+    if (existing.userId !== userId) {
+      throw new Error("Idempotency key already used");
+    }
+    return {
+      deduped: true as const,
+      payoutId: existing._id,
+      transactionId: existing.transactionId,
+      status: existing.status,
+      sgxOrderId: existing.sgxOrderId,
+    };
+  }
+
+  const user = await ctx.db.get(userId);
+  if (!user) throw new Error("User not found");
+  if ((user.balance || 0) < amount) {
+    throw new Error("Insufficient funds");
+  }
+
+  const phone = normalizeE164Zimbabwe(args.ecocashPhone);
+  if (phone.length < 12) {
+    throw new Error("Check EcoCash / phone number format");
+  }
+
+  /*
+   * The fee comes off here, not at Chessa. `amount` is what leaves the player's
+   * balance; `net` is what the off-ramp is asked to deliver. Sending the gross
+   * to Chessa and taking the fee afterwards would mean the recipient sees a
+   * figure nobody quoted them, and the refund path would have to know which of
+   * the two numbers to give back.
+   */
+  const { fee, net } = computeWithdrawFee(amount);
+
+  if (args.dryRun) {
+    return {
+      deduped: false as const,
+      dryRun: true as const,
+      payoutId: null,
+      status: "not_queued" as const,
+      ecocashPhone: phone,
+      amountUsd: amount,
+      feeUsd: fee,
+      netUsd: net,
+      balanceAfter: roundMoney((user.balance || 0) - amount),
+    };
+  }
+
+  await ctx.db.patch(userId, {
+    balance: roundMoney((user.balance || 0) - amount),
+    payoutPhone: phone,
+  });
+
+  const now = Date.now();
+  const transactionId = await ctx.db.insert("transactions", {
+    userId,
+    amount: -amount,
+    type: "withdrawal",
+    status: "pending",
+    fee,
+    timestamp: now,
+    paymentMethod: "ecocash-usd",
+  });
+
+  const payoutId = await ctx.db.insert("ecocashPayouts", {
+    userId,
+    transactionId,
+    idempotencyKey,
+    ecocashPhone: phone,
+    firstName: args.firstName.trim() || "Player",
+    lastName: args.lastName.trim() || "User",
+    amountUsd: amount,
+    feeUsd: fee,
+    netUsd: net,
+    status: "queued",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await ctx.scheduler.runAfter(
+    0,
+    internal.chessaBridge.runCryptoToEcocashForPayout,
+    { payoutId },
+  );
+
+  return {
+    deduped: false as const,
+    payoutId,
+    transactionId,
+    status: "queued" as const,
+    amountUsd: amount,
+    feeUsd: fee,
+    netUsd: net,
+  };
+}
+
+/**
+ * One-shot: deduct balance, create the pending withdrawal + payout rows, and
+ * push to Chessa in the background. Subscribe to `getMyPayouts` for live status.
  */
 export const requestEcocashWithdrawal = mutation({
   args: {
@@ -202,83 +322,7 @@ export const requestEcocashWithdrawal = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
     const userId = identity.subject.split("|")[0] as Id<"users">;
-
-    const amount = roundMoney(args.amount);
-    if (amount < MIN_USD) {
-      throw new Error(`Minimum withdrawal is $${MIN_USD}`);
-    }
-
-    const idempotencyKey = args.idempotencyKey.trim();
-    if (!idempotencyKey) throw new Error("idempotencyKey required");
-
-    const existing = await ctx.db
-      .query("ecocashPayouts")
-      .withIndex("by_idempotency", (q) => q.eq("idempotencyKey", idempotencyKey))
-      .first();
-    if (existing) {
-      if (existing.userId !== userId) {
-        throw new Error("Idempotency key already used");
-      }
-      return {
-        deduped: true,
-        payoutId: existing._id,
-        transactionId: existing.transactionId,
-        status: existing.status,
-        sgxOrderId: existing.sgxOrderId,
-      };
-    }
-
-    const user = await ctx.db.get(userId);
-    if (!user) throw new Error("User not found");
-    if ((user.balance || 0) < amount) {
-      throw new Error("Insufficient funds");
-    }
-
-    const phone = normalizeE164Zimbabwe(args.ecocashPhone);
-    if (phone.length < 12) {
-      throw new Error("Check EcoCash / phone number format");
-    }
-
-    await ctx.db.patch(userId, {
-      balance: roundMoney((user.balance || 0) - amount),
-    });
-
-    const now = Date.now();
-    const transactionId = await ctx.db.insert("transactions", {
-      userId,
-      amount: -amount,
-      type: "withdrawal",
-      status: "pending",
-      fee: undefined,
-      timestamp: now,
-      paymentMethod: "ecocash-zwg",
-    });
-
-    const payoutId = await ctx.db.insert("ecocashPayouts", {
-      userId,
-      transactionId,
-      idempotencyKey,
-      ecocashPhone: phone,
-      firstName: args.firstName.trim() || "Player",
-      lastName: args.lastName.trim() || "User",
-      amountUsd: amount,
-      status: "queued",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    await ctx.scheduler.runAfter(
-      0,
-      internal.chessaBridge.runCryptoToEcocashForPayout,
-      { payoutId },
-    );
-
-    return {
-      deduped: false,
-      payoutId,
-      transactionId,
-      status: "queued" as const,
-    };
+    return await queueEcocashPayoutFor(ctx, userId, args);
   },
 });
 

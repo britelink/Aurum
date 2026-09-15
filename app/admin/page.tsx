@@ -3,6 +3,7 @@
 import { useConvexAuth, useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
+import RailsPanel from "@/components/admin/RailsPanel";
 import { useCallback, useEffect, useState } from "react";
 
 type ChainTreasury = {
@@ -163,6 +164,8 @@ export default function AdminPage() {
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
+        <RailsPanel />
+
         <section className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 space-y-6">
           <div>
             <p className="text-sm text-slate-500 dark:text-slate-400">

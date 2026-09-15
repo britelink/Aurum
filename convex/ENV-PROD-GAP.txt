@@ -1,51 +1,45 @@
-Convex production — env vs codebase (no secret values in this file)
-======================================================================
+Aurum Convex — environment
+==========================
 
-SGX URLs IN CODE (override base with SGX_V0_BASE_URL if needed)
----------------------------------------------------------------
-- Default base: https://sgxremit.com  (no trailing slash)
-- POST /v0/ecocash-to-crypto   (admin EcoCash → USDT session)
-- POST /v0/crypto-to-ecocash   (automated withdrawal quote + funding)
-- GET  /v0/health             (admin “Verify key” on /admin)
+This file is now a pointer. The authoritative list, with what each variable is
+for and what breaks without it, lives in `convex/RAILS.md` under "Environment".
 
-REQUIRED FOR SGX HTTP (admin fund only — optional if using Chessa bridge below)
------------------------------------------------------------------------------
-- SGX_V0_PARTNER_BEARER … only for `adminFundWalletViaEcocash` HTTP to sgxremit.com
+To see what is already resolvable and what is missing:
 
-WITHDRAW (EcoCash cash-out) — Chessa Convex bridge (no sgxremit.com API)
-------------------------------------------------------------------------
-- CHESSA_CONVEX_URL … Chessa deployment URL (prod example: https://silent-cricket-370.convex.cloud)
-- CHESSA_V0_INTERNAL_SECRET … must match Chessa Convex V0_API_INTERNAL_SECRET
-  (same value as Chessa Next SGX_V0_INTERNAL_ACTION_SECRET; built-in dev default in Chessa .env.example)
-- PENNY_TREASURY_TRON_PRIVATE_KEY + PENNY_TREASURY_TRC20_ADDRESS … auto-send USDT (Tron orders)
-- Optional PENNY_TREASURY_BEP20_PRIVATE_KEY + PENNY_TREASURY_BEP20_ADDRESS … if Chessa returns BSC address
+    npm run env:plan                                    # dry run
+    npm run env:plan -- --sgx ../chessa-main/.env.local  # pull from SGX too
+    npm run env:apply                                   # set it on dev
+    node scripts/seed-convex-env.mjs --apply --prod     # set it on production
 
-FOR ADMIN “FUND WALLET” (ecocash-to-crypto)
---------------------------------------------
-- PENNY_ONRAMP_WALLET_BEP20 … settlement wallet address (format per SGX partner config)
+`scripts/seed-convex-env.mjs` knows the old SGX/Penny names and maps them onto
+the ones the code reads today (`PRIVATE_KEY` → `AURUM_AGENT_PRIVATE_KEY`, and so
+on), generates the Convex Auth key pair if either half is missing, and refuses
+to apply a partial rail configuration. Secrets are printed only as fingerprints.
 
-FOR ADMIN “TREASURY USDT” DISPLAY (live BEP-20 balance on /admin)
------------------------------------------------------------------
-- PENNY_ONRAMP_WALLET_BEP20 … same address; Convex action calls BSC `balanceOf` (no private key).
-- Optional: PENNY_BSC_RPC_URL … default `https://bsc-dataseed.binance.org`
-- Optional: PENNY_BSC_USDT_CONTRACT … default BSC mainnet USDT `0x55d398326f99059fF775485246999027B3197955`
+What changed from the old version of this file
+----------------------------------------------
 
-FOR AUTO WITHDRAW + TRC20 SEND TO SGX paymentAddress
------------------------------------------------------
-- PENNY_TREASURY_TRON_PRIVATE_KEY
-- PENNY_TREASURY_TRC20_ADDRESS (recommended — must match key)
+- The **fiat on-ramp is gone.** `PENNY_ONRAMP_WALLET_BEP20` is still read by the
+  admin "fund wallet via EcoCash" tool and the treasury balance display, but no
+  player-facing deposit touches it. Players deposit crypto; the watcher credits
+  them.
+- Deposits and payouts now share **one** wallet — the agent wallet. There is no
+  separate inbound address to keep topped up, because the float a player deposits
+  is the float another player is paid from.
+- `AURUM_BSC_RPC_URL` moved from "optional" to effectively required. Public BSC
+  dataseeds refuse `eth_getLogs` outright; on them the watcher makes no progress
+  and no deposit is ever credited.
+- `PENNY_HOUSE_BANK_USER_ID` is no longer load-bearing. The game settles against
+  the losing pool inside one mutation and takes its rake as a fee on the round —
+  it no longer moves money through a house *user* row, so a missing or wrong id
+  cannot silently break settlement.
 
-HOUSE BANK / POOL USER
+Never set on production
 -----------------------
-- Hard-coded in code: `jh79qz8jbwqvxdwhybp06afxns7xfyyv` (`lib/house.ts` + `convex/aurum.ts`).
-  That row must exist in **Penny’s** Convex `users` table (import/sync if Penny uses a separate backend from SGX).
 
-OPTIONAL
---------
-- TRON_GRID_API_KEY, TRON_FULL_HOST
-- SGX_V0_OFFRAMP_CHAIN  ("Tron" or "BNB Chain")
-- SGX_PENNY_CALLBACK_BEARER  (only if SGX POSTs /sgx/withdrawal-callback)
-- ADMIN_USER_IDS or ADMIN_EMAILS  (comma-separated; extra admins without DB role)
+- `AURUM_SANDBOX_ENABLED` — unlocks `railsSandbox.ts`, which can credit a balance
+  from nothing. On this platform a credited balance walks out as real USDT.
 
-DO NOT COMMIT SECRETS — set via:
-  bunx convex env set NAME "value" --prod
+Do not commit secrets. Set them with:
+
+    npx convex env set NAME "value" --prod

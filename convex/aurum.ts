@@ -74,267 +74,77 @@ function usersIdFromIdentitySubject(subject: string): Id<"users"> {
   Session management has been moved to session.ts
 */
 
-export const placeBet = mutation({
+/**
+ * Manual balance adjustment — the only hand-written path into a player's money.
+ *
+ * What it replaces is worth naming. `depositFunds` was a public mutation that
+ * credited the caller's own balance with whatever number they passed and no
+ * payment behind it. `adminDepositFunds` and `adminWithdrawFunds` took an
+ * arbitrary `userId` and had **no admin check at all** — and were exposed to the
+ * open internet through unauthenticated Next routes under `/api/house` and
+ * `/api/payment`. While the balance was play money that was merely wrong; with
+ * the crypto payout rail live, minting a balance means withdrawing real USDT
+ * from the agent wallet.
+ *
+ * So: one function, admin identity required, every use audited in
+ * `adminActions`, and it books a `transactions` row like any other movement so
+ * a hand adjustment is never invisible in the ledger.
+ */
+export const adminAdjustBalance = mutation({
   args: {
-    sessionId: v.id("sessions"),
-    amount: v.union(v.literal(1), v.literal(2)),
-    direction: v.union(v.literal("up"), v.literal("down")),
+    userId: v.id("users"),
+    /** Positive credits, negative debits. */
+    delta: v.number(),
+    reason: v.string(),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
-
-    const userId = identity.subject.split("|")[0] as Id<"users">;
-
-    // Ensure session exists and is open
-    const session = await ctx.db.get(args.sessionId);
-    if (!session) throw new Error("Session not found");
-    if (session.status !== "open") throw new Error("Session is closed");
-
-    // Update session volumes based on bet direction
-    if (args.direction === "up") {
-      await ctx.db.patch(args.sessionId, {
-        totalBuyVolume: session.totalBuyVolume + args.amount,
-      });
-    } else {
-      await ctx.db.patch(args.sessionId, {
-        totalSellVolume: session.totalSellVolume + args.amount,
-      });
+    const adminId = usersIdFromIdentitySubject(identity.subject);
+    const admin = await ctx.db.get(adminId);
+    if (!admin || !isAdminUser(admin)) {
+      throw new Error("Unauthorized: Admin access required");
     }
 
-    // Register the bet with initial "pending" status
-    return await ctx.db.insert("bets", {
-      userId,
-      sessionId: args.sessionId,
-      amount: args.amount,
-      direction: args.direction,
-      status: "pending",
-      payout: undefined,
-      sessionOutcome: undefined,
+    const reason = args.reason.trim();
+    if (!reason) throw new Error("A reason is required for a manual adjustment");
+
+    const delta = Math.round(args.delta * 100) / 100;
+    if (!Number.isFinite(delta) || delta === 0) {
+      throw new Error("delta must be a non-zero amount");
+    }
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    const before = user.balance ?? 0;
+    const after = Math.round((before + delta) * 100) / 100;
+    if (after < 0) {
+      throw new Error(
+        `Adjustment would leave a negative balance (${before} + ${delta})`,
+      );
+    }
+
+    await ctx.db.patch(args.userId, { balance: after });
+
+    const transactionId = await ctx.db.insert("transactions", {
+      userId: args.userId,
+      amount: delta,
+      type: delta > 0 ? "deposit" : "withdrawal",
+      status: "completed",
+      timestamp: Date.now(),
+      paymentMethod: "cash",
+      ref: `admin:${reason}`,
     });
-  },
-});
 
-export const depositFunds = mutation({
-  args: {
-    amount: v.number(),
-    paymentMethod: v.union(
-      v.literal("card-usd"),
-      v.literal("zimswitch-usd"),
-      v.literal("zimswitch-zwg"),
-      v.literal("ecocash-usd"),
-      v.literal("ecocash-zwg"),
-    ),
-  },
-  handler: async (ctx, args) => {
-    console.log("Starting depositFunds mutation");
+    await ctx.db.insert("adminActions", {
+      adminId,
+      actionType: delta > 0 ? "manual_credit" : "manual_debit",
+      details: `${args.userId} ${before} -> ${after} (${delta}) — ${reason}`,
+      timestamp: Date.now(),
+    });
 
-    const identity = await ctx.auth.getUserIdentity();
-    console.log("Auth identity:", identity);
-
-    if (!identity) throw new Error("Not authenticated");
-
-    // Get the actual user ID from the identity
-    const userId = identity.subject.split("|")[0] as Id<"users">;
-    console.log("Parsed userId:", userId);
-
-    const user = await ctx.db.get(userId);
-    console.log("Found user:", user);
-
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    console.log("Current balance:", user.balance);
-    console.log("Adding amount:", args.amount);
-
-    try {
-      // Update existing user's balance
-      await ctx.db.patch(userId, {
-        balance: Math.round(((user.balance || 0) + args.amount) * 100) / 100,
-      });
-      console.log("Successfully updated balance");
-
-      const transaction = await ctx.db.insert("transactions", {
-        userId,
-        amount: args.amount,
-        type: "deposit",
-        status: "completed",
-        fee: undefined,
-        timestamp: Date.now(),
-        paymentMethod: args.paymentMethod,
-      });
-      console.log("Created transaction:", transaction);
-
-      return transaction;
-    } catch (error) {
-      console.error("Error in depositFunds:", error);
-      throw error;
-    }
-  },
-});
-
-export const adminDepositFunds = mutation({
-  args: {
-    userId: v.string(),
-    amount: v.number(),
-    paymentMethod: v.union(
-      v.literal("card-usd"),
-      v.literal("zimswitch-usd"),
-      v.literal("zimswitch-zwg"),
-      v.literal("ecocash-usd"),
-      v.literal("ecocash-zwg"),
-    ),
-  },
-  handler: async (ctx, args) => {
-    console.log("Starting adminDepositFunds mutation");
-    console.log("User ID:", args.userId);
-    console.log("Amount:", args.amount);
-    console.log("Payment method:", args.paymentMethod);
-
-    const userId = args.userId as Id<"users">;
-    const user = await ctx.db.get(userId);
-    console.log("Found user:", user);
-
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    console.log("Current balance:", user.balance);
-    console.log("Adding amount:", args.amount);
-
-    try {
-      // Update existing user's balance
-      await ctx.db.patch(userId, {
-        balance: Math.round(((user.balance || 0) + args.amount) * 100) / 100,
-      });
-      console.log("Successfully updated balance");
-
-      const transaction = await ctx.db.insert("transactions", {
-        userId,
-        amount: args.amount,
-        type: "deposit",
-        status: "completed",
-        fee: undefined,
-        timestamp: Date.now(),
-        paymentMethod: args.paymentMethod,
-      });
-      console.log("Created transaction:", transaction);
-
-      return transaction;
-    } catch (error) {
-      console.error("Error in adminDepositFunds:", error);
-      throw error;
-    }
-  },
-});
-
-export const withdrawFunds = mutation({
-  args: {
-    amount: v.number(),
-    paymentMethod: v.union(
-      v.literal("card-usd"),
-      v.literal("zimswitch-usd"),
-      v.literal("zimswitch-zwg"),
-      v.literal("ecocash-usd"),
-      v.literal("ecocash-zwg"),
-    ),
-  },
-  handler: async (ctx, args) => {
-    console.log("Starting withdrawFunds mutation");
-
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-
-    const userId = identity.subject.split("|")[0] as Id<"users">;
-    const user = await ctx.db.get(userId);
-    if (!user) throw new Error("User not found");
-
-    if ((user.balance || 0) < args.amount) {
-      throw new Error("Insufficient funds");
-    }
-
-    console.log("Current balance:", user.balance);
-    console.log("Withdrawal amount:", args.amount);
-
-    try {
-      // Update user's balance
-      await ctx.db.patch(userId, {
-        balance: Math.round(((user.balance || 0) - args.amount) * 100) / 100,
-      });
-      console.log("Successfully updated balance");
-
-      const transaction = await ctx.db.insert("transactions", {
-        userId,
-        amount: -args.amount,
-        type: "withdrawal",
-        status: "pending", // Start as pending, will be updated by payment gateway
-        fee: undefined,
-        timestamp: Date.now(),
-        paymentMethod: args.paymentMethod,
-      });
-      console.log("Created withdrawal transaction:", transaction);
-
-      return transaction;
-    } catch (error) {
-      console.error("Error in withdrawFunds:", error);
-      throw error;
-    }
-  },
-});
-
-export const adminWithdrawFunds = mutation({
-  args: {
-    userId: v.string(),
-    amount: v.number(),
-    paymentMethod: v.union(
-      v.literal("card-usd"),
-      v.literal("zimswitch-usd"),
-      v.literal("zimswitch-zwg"),
-      v.literal("ecocash-usd"),
-      v.literal("ecocash-zwg"),
-    ),
-  },
-  handler: async (ctx, args) => {
-    console.log("Starting adminWithdrawFunds mutation");
-    console.log("User ID:", args.userId);
-    console.log("Amount:", args.amount);
-    console.log("Payment method:", args.paymentMethod);
-
-    const userId = args.userId as Id<"users">;
-    const user = await ctx.db.get(userId);
-    if (!user) throw new Error("User not found");
-
-    if ((user.balance || 0) < args.amount) {
-      throw new Error("Insufficient funds");
-    }
-
-    console.log("Current balance:", user.balance);
-    console.log("Withdrawal amount:", args.amount);
-
-    try {
-      // Update user's balance
-      await ctx.db.patch(userId, {
-        balance: Math.round(((user.balance || 0) - args.amount) * 100) / 100,
-      });
-      console.log("Successfully updated balance");
-
-      const transaction = await ctx.db.insert("transactions", {
-        userId,
-        amount: -args.amount,
-        type: "withdrawal",
-        status: "pending",
-        fee: undefined,
-        timestamp: Date.now(),
-        paymentMethod: args.paymentMethod,
-      });
-      console.log("Created withdrawal transaction:", transaction);
-
-      return transaction;
-    } catch (error) {
-      console.error("Error in adminWithdrawFunds:", error);
-      throw error;
-    }
+    return { transactionId, before, after };
   },
 });
 
@@ -395,20 +205,53 @@ export const getAdminAccess = query({
   },
 });
 
+/**
+ * The player's ledger, newest first.
+ *
+ * Bounded. This used to `.collect()` the whole history on every read, and every
+ * one of those rows crossed the wire again each time a new one was written —
+ * a subscription whose cost grew with how much the player had played, which is
+ * exactly backwards. Twenty-five rows is a screenful; ask for more explicitly.
+ */
 export const getUserTransactions = query({
-  handler: async (ctx) => {
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
 
     const userId = identity.subject.split("|")[0] as Id<"users">;
 
-    const transactions = await ctx.db
+    return await ctx.db
       .query("transactions")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user_time", (q) => q.eq("userId", userId))
       .order("desc")
-      .collect();
+      .take(Math.min(args.limit ?? 25, 100));
+  },
+});
 
-    return transactions;
+/**
+ * Balance plus identity, as one small document.
+ *
+ * `getCurrentUser` returns the whole `users` row, so any write to it — a payout
+ * address being remembered, a phone number — pushes every field to every open
+ * tab. The game header only wants the balance, and it wants it on every round.
+ */
+export const myBalance = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const userId = identity.subject.split("|")[0] as Id<"users">;
+    const user = await ctx.db.get(userId);
+    if (!user) return null;
+    return {
+      userId,
+      name: user.name ?? null,
+      email: user.email ?? null,
+      balance: user.balance ?? 0,
+      payoutAddress: user.payoutAddress ?? null,
+      payoutPhone: user.payoutPhone ?? null,
+    };
   },
 });
 

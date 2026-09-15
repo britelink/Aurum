@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   BetPosition,
@@ -38,10 +38,28 @@ export default function TradingChart({
   // State from PriceSimulator
   const currentUser = useQuery(api.aurum.getCurrentUser);
   const serverBalance = currentUser?.balance || 0;
-  const withdrawFunds = useMutation(api.aurum.withdrawFunds);
-  const depositFunds = useMutation(api.aurum.depositFunds);
-  const adminDepositFunds = useMutation(api.aurum.adminDepositFunds);
-  const adminWithdrawFunds = useMutation(api.aurum.adminWithdrawFunds);
+  /*
+   * The demo no longer moves money, and the four mutations that used to sit
+   * here are gone from the backend entirely.
+   *
+   * They were `depositFunds` / `withdrawFunds` / `adminDepositFunds` /
+   * `adminWithdrawFunds`, and this component called them to settle its own
+   * rounds: the browser decided who won, worked out the payout, and told the
+   * server to credit it. Any client could claim any number. That was tolerable
+   * only while balances were play money — the live rail now sends real USDT, so
+   * settlement belongs to `convex/gameEngine.settleRound` and nowhere else.
+   *
+   * Local no-ops keep this demo's flow intact without touching a balance. The
+   * real table is `components/game/LiveGame.tsx`.
+   */
+  const noMoney = useCallback(async (...args: unknown[]) => {
+    void args;
+    return undefined;
+  }, []);
+  const withdrawFunds = noMoney;
+  const depositFunds = noMoney;
+  const adminDepositFunds = noMoney;
+  const adminWithdrawFunds = noMoney;
   const [betAmount, setBetAmount] = useState<BetAmount>(1);
   const [sessionPlayers, setSessionPlayers] = useState<Player[]>([]);
   const [sessionResult, setSessionResult] = useState<SessionResult | null>(

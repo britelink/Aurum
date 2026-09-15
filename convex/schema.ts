@@ -2,13 +2,29 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+/**
+ * Aurum (Penny) — gaming platform on the SGX/Chessa money rails.
+ *
+ * Money only ever enters as crypto (USDT/USDC on BNB Smart Chain) and only ever
+ * leaves as crypto or as EcoCash routed through Chessa. There is no fiat
+ * in-bound: the card/Zimswitch/EcoCash deposit providers never worked, so the
+ * deposit side is the on-chain watcher alone and the payout side is the agent
+ * wallet plus Chessa's off-ramp.
+ *
+ * `users.balance` is the custodial USD ledger. Everything here exists to move a
+ * number into it (deposits), around it (the game) or out of it (payouts), and
+ * every one of those paths is idempotent because they all end at a real
+ * transfer somebody can lose.
+ */
 export default defineSchema({
   ...authTables,
+
   system: defineTable({
     name: v.string(),
     status: v.string(),
     lastRun: v.number(),
   }).index("by_name", ["name"]),
+
   users: defineTable({
     name: v.optional(v.string()),
     image: v.optional(v.string()),
@@ -17,22 +33,40 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
-    balance: v.optional(v.number()), // real money balance
+    balance: v.optional(v.number()), // custodial USD ledger
     walletBalance: v.optional(v.number()), // in-game currency balance
     ecoUsdAddress: v.optional(v.string()),
+    /** Last payout address the player used, so the withdraw form can prefill. */
+    payoutAddress: v.optional(v.string()),
+    /** Last EcoCash number used, E.164. */
+    payoutPhone: v.optional(v.string()),
     role: v.optional(
       v.union(v.literal("player"), v.literal("admin"), v.literal("agent")),
     ),
     referralCode: v.optional(v.string()),
   }).index("email", ["email"]),
 
+  // ---------------------------------------------------------------------
+  // Game
+  // ---------------------------------------------------------------------
+
+  /**
+   * A round. `seed` makes the price curve deterministic: every client draws the
+   * same chart from (seed, startTime) without the server writing a tick to the
+   * database. The old build wrote nothing either, but it also showed everyone a
+   * different random walk, so no two players were watching the same game.
+   */
   sessions: defineTable({
     startTime: v.number(),
     endTime: v.number(),
     processingEndTime: v.number(),
     neutralAxis: v.number(),
-    totalBuyVolume: v.number(), // Total amount bet on 'up'
-    totalSellVolume: v.number(), // Total amount bet on 'down'
+    seed: v.optional(v.number()),
+    totalBuyVolume: v.number(),
+    totalSellVolume: v.number(),
+    /** Bet counts, so the UI can show the book without reading every bet. */
+    buyCount: v.optional(v.number()),
+    sellCount: v.optional(v.number()),
     finalPrice: v.optional(v.number()),
     status: v.union(
       v.literal("open"),
@@ -43,7 +77,11 @@ export default defineSchema({
     winner: v.optional(
       v.union(v.literal("buyers"), v.literal("sellers"), v.literal("neutral")),
     ),
-  }).index("by_status", ["status"]),
+    /** House cut taken on this round, in USD. */
+    houseFee: v.optional(v.number()),
+  })
+    .index("by_status", ["status"])
+    .index("by_start", ["startTime"]),
 
   bets: defineTable({
     userId: v.id("users"),
@@ -51,11 +89,16 @@ export default defineSchema({
     amount: v.union(v.literal(1), v.literal(2)),
     direction: v.union(v.literal("up"), v.literal("down")),
     status: v.union(v.literal("pending"), v.literal("won"), v.literal("lost")),
-    payout: v.optional(v.number()), // Amount won (if applicable)
+    payout: v.optional(v.number()),
     sessionOutcome: v.optional(
       v.union(v.literal("won"), v.literal("lost"), v.literal("void")),
     ),
-  }).index("by_session", ["sessionId"]),
+  })
+    .index("by_session", ["sessionId"])
+    // One read to answer "what has this player staked this round", instead of
+    // pulling the whole round's book into every browser.
+    .index("by_session_user", ["sessionId", "userId"])
+    .index("by_user", ["userId"]),
 
   transactions: defineTable({
     userId: v.id("users"),
@@ -66,13 +109,15 @@ export default defineSchema({
       v.literal("win"),
       v.literal("loss"),
       v.literal("fee"),
+      v.literal("stake"),
+      v.literal("refund"),
     ),
     status: v.union(
       v.literal("pending"),
       v.literal("completed"),
       v.literal("failed"),
     ),
-    fee: v.optional(v.number()), // 8% cut
+    fee: v.optional(v.number()),
     timestamp: v.number(),
     paymentMethod: v.union(
       v.literal("eco-usd"),
@@ -82,8 +127,16 @@ export default defineSchema({
       v.literal("zimswitch-zwg"),
       v.literal("ecocash-usd"),
       v.literal("ecocash-zwg"),
+      // Live rails.
+      v.literal("usdt-bep20"),
+      v.literal("usdc-bep20"),
+      v.literal("game"),
     ),
-  }).index("by_user", ["userId"]),
+    /** Free-form pointer back to the deposit/payout that caused this row. */
+    ref: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_time", ["userId", "timestamp"]),
 
   leaderboard: defineTable({
     userId: v.id("users"),
@@ -106,7 +159,109 @@ export default defineSchema({
     timestamp: v.number(),
   }).index("by_admin", ["adminId"]),
 
-  // SGX (Chessa) → EcoCash withdrawal pipeline: real-time via Convex subscription on this table
+  // ---------------------------------------------------------------------
+  // Inbound rail — crypto deposits (the SGX Pay engine, ported)
+  // ---------------------------------------------------------------------
+
+  /**
+   * One intent to deposit. Every player's funds land in the same agent wallet,
+   * so each open deposit is quoted a **unique payable amount**: what the player
+   * asked for plus a five-decimal tag. A transfer carrying that exact figure
+   * identifies exactly one deposit, which is what lets a single shared address
+   * serve every player without per-user wallets or per-user gas.
+   */
+  cryptoDeposits: defineTable({
+    userId: v.id("users"),
+    reference: v.string(), // "aurd_…" — public handle
+    asset: v.string(), // "USDT" | "USDC"
+    chain: v.string(), // "BNB Smart Chain (BEP20)"
+    /** What the player said they would send. */
+    amountRequested: v.number(),
+    /** What they must actually send — requested + tag. Inbound fee is zero. */
+    amountPayable: v.number(),
+    amountReceived: v.number(),
+    /** Credited to the USD balance. Equals received while the inbound fee is 0. */
+    amountCredited: v.optional(v.number()),
+    feeAmount: v.number(),
+    /** Fee terms as they stood when this deposit was quoted. */
+    feePercentAtCreate: v.optional(v.number()),
+    depositAddress: v.string(),
+    payerAddress: v.optional(v.string()),
+    status: v.string(), // awaiting_payment | detected | confirmed | underpaid | expired | cancelled
+    txHash: v.optional(v.string()),
+    blockNumber: v.optional(v.number()),
+    confirmations: v.optional(v.number()),
+    /** Set when a transfer arrived after `expiresAt` but inside the late window. */
+    claimedAfterExpiry: v.optional(v.boolean()),
+    creditedTransactionId: v.optional(v.id("transactions")),
+    expiresAt: v.number(),
+    paidAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_reference", ["reference"])
+    .index("by_user_created", ["userId", "createdAt"])
+    .index("by_status", ["status"])
+    .index("by_tx_hash", ["txHash"])
+    // Watcher lookup: open deposits for one asset, matched on payable amount.
+    .index("by_open_amount", ["status", "asset", "amountPayable"]),
+
+  /** Transfers that reached the agent wallet and matched no open deposit. */
+  unclaimedDeposits: defineTable({
+    txHash: v.string(),
+    fromAddress: v.string(),
+    amountToken: v.string(),
+    symbol: v.string(),
+    chain: v.string(),
+    depositAddress: v.string(),
+    blockNumber: v.number(),
+    status: v.string(), // "unclaimed" | "claimed"
+    claimedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+  })
+    .index("by_tx_hash", ["txHash"])
+    .index("by_from_address", ["fromAddress"])
+    .index("by_status", ["status"]),
+
+  /** Watcher cursor and cached addresses. Strings, so a Node action can hold state. */
+  railConfig: defineTable({
+    key: v.string(),
+    value: v.string(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
+  // ---------------------------------------------------------------------
+  // Outbound rail — crypto payouts from the agent wallet
+  // ---------------------------------------------------------------------
+
+  cryptoPayouts: defineTable({
+    userId: v.id("users"),
+    transactionId: v.id("transactions"),
+    idempotencyKey: v.string(),
+    /** The player's own wallet. */
+    toAddress: v.string(),
+    asset: v.string(),
+    chain: v.string(),
+    /** Debited from the balance, gross. */
+    amountUsd: v.number(),
+    /** Withdrawal fee kept by the house. */
+    feeUsd: v.number(),
+    /** Tokens actually sent = amountUsd - feeUsd. */
+    amountToken: v.number(),
+    status: v.string(), // queued | sending | sent | failed
+    txHash: v.optional(v.string()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_idempotency", ["idempotencyKey"])
+    .index("by_user_created", ["userId", "createdAt"])
+    .index("by_status", ["status"]),
+
+  // ---------------------------------------------------------------------
+  // Outbound rail — EcoCash, routed through Chessa
+  // ---------------------------------------------------------------------
+
   ecocashPayouts: defineTable({
     userId: v.id("users"),
     transactionId: v.id("transactions"),
@@ -114,7 +269,12 @@ export default defineSchema({
     ecocashPhone: v.string(), // E.164 e.g. +263771234567
     firstName: v.string(),
     lastName: v.string(),
+    /** Debited from the balance, gross (fee included). */
     amountUsd: v.number(),
+    /** Withdrawal fee kept by the house. Absent on rows written before fees. */
+    feeUsd: v.optional(v.number()),
+    /** USD the recipient should actually receive = amountUsd - feeUsd. */
+    netUsd: v.optional(v.number()),
     status: v.union(
       v.literal("queued"),
       v.literal("sgx_submitted"),
@@ -123,7 +283,7 @@ export default defineSchema({
     ),
     sgxError: v.optional(v.string()),
     sgxOrderId: v.optional(v.string()),
-    /** Partner API v0 (crypto-to-ecocash) — returned after quote */
+    /** Chessa v0 (crypto-to-ecocash) — returned after the quote. */
     sgxPaymentAddress: v.optional(v.string()),
     sgxNetwork: v.optional(v.string()),
     sgxSendAmount: v.optional(v.number()),
@@ -133,7 +293,7 @@ export default defineSchema({
     sgxFee: v.optional(v.number()),
     chessaOrderId: v.optional(v.string()),
     chessaShortId: v.optional(v.string()),
-    /** SGX: TRC20 USDT float tx to Chessa’s deposit (audit), not the player’s */
+    /** Agent-wallet tx funding Chessa's deposit address (audit, not the player's). */
     tronFloatTxid: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),

@@ -9,7 +9,13 @@
     "predev": "convex dev --until-success && node setup.mjs --once && convex dashboard",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:withdraw": "node scripts/test-withdraw-automation.mjs",
+    "test:withdraw:prod": "node scripts/test-withdraw-automation.mjs --prod",
+    "rails:dryrun": "node --no-warnings scripts/rails-dryrun.mjs",
+    "rails:e2e": "node --no-warnings scripts/rails-dryrun.mjs --deployment",
+    "env:plan": "node scripts/seed-convex-env.mjs",
+    "env:apply": "node scripts/seed-convex-env.mjs --apply"
   },
   "dependencies": {
     "@auth/core": "0.37.0",

@@ -75,10 +75,10 @@ export async function invokeChessaCryptoToEcocash(args: {
 }): Promise<ChessaCryptoToEcocashResult> {
   const client = new ConvexHttpClient(getChessaConvexUrl());
   const originAsset = args.originAsset?.trim() || "USDT";
-  let chain = args.chain?.trim() || "Tron";
-  if (originAsset === "USDT" && chain === "BNB Smart Chain (BEP20)") {
-    chain = "Tron";
-  }
+  const chain =
+    args.chain?.trim() ||
+    process.env.PENNY_WITHDRAW_CHAIN?.trim() ||
+    "BNB Smart Chain (BEP20)";
 
   return await client.action(cryptoToEcocashRef, {
     internalSecret: getChessaV0InternalSecret(),
@@ -102,14 +102,21 @@ export const runCryptoToEcocashForPayout = internalAction({
     if (!p || p.status !== "queued") return;
 
     try {
+      // `netUsd` is what the recipient was quoted: the gross left the player's
+      // balance, the fee stayed with the house, and Chessa is only ever asked
+      // to deliver the difference. Rows written before withdrawal fees existed
+      // have no `netUsd`, and for those the gross *is* the net.
+      const deliverUsd = p.netUsd ?? p.amountUsd;
       const out = await invokeChessaCryptoToEcocash({
         firstName: p.firstName,
         lastName: p.lastName,
         phone: e164ZimbabweToSgxPhone(p.ecocashPhone),
-        intendedUsdAmount: p.amountUsd,
+        intendedUsdAmount: deliverUsd,
         clientReference: p.idempotencyKey,
         originAsset: process.env.PENNY_WITHDRAW_ORIGIN_ASSET?.trim() || "USDT",
-        chain: process.env.PENNY_WITHDRAW_CHAIN?.trim() || "Tron",
+        chain:
+          process.env.PENNY_WITHDRAW_CHAIN?.trim() ||
+          "BNB Smart Chain (BEP20)",
       });
 
       const orderId = out.chessaOrderId || out.convexOrderId;
