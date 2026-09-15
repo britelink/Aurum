@@ -10,6 +10,7 @@
 
 import type * as aurum from "../aurum.js";
 import type * as auth from "../auth.js";
+import type * as authStatus from "../authStatus.js";
 import type * as britelinkSgx from "../britelinkSgx.js";
 import type * as buyCrypto from "../buyCrypto.js";
 import type * as buyCryptoInternal from "../buyCryptoInternal.js";
@@ -44,6 +45,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   aurum: typeof aurum;
   auth: typeof auth;
+  authStatus: typeof authStatus;
   britelinkSgx: typeof britelinkSgx;
   buyCrypto: typeof buyCrypto;
   buyCryptoInternal: typeof buyCryptoInternal;

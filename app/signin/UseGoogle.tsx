@@ -2,22 +2,42 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import React, { useState } from "react";
 
-export function UseGoogleSignIn() {
+export function UseGoogleSignIn({
+  onError,
+}: {
+  /** Surface the failure where the person who clicked can see it. */
+  onError?: (message: string) => void;
+}) {
   const { signIn } = useAuthActions();
   const [isHovering, setIsHovering] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
+  const [busy, setBusy] = useState(false);
 
+  /*
+   * This used to `console.error` and return. When Google had no credentials on
+   * the deployment the provider threw, nothing rendered, and the button read as
+   * simply unresponsive — the single hardest failure to diagnose from the
+   * outside, because a dead button and a broken one look identical.
+   */
   const handleSignIn = async () => {
+    setBusy(true);
     try {
       await signIn("google");
     } catch (error) {
-      console.error("Sign in failed:", error);
+      const raw = error instanceof Error ? error.message : String(error);
+      onError?.(
+        raw.toLowerCase().includes("provider")
+          ? "Google sign-in is not configured on this deployment yet. Use email instead."
+          : "Google sign-in failed. Try again, or use email.",
+      );
+      setBusy(false);
     }
   };
 
   return (
     <button
       onClick={handleSignIn}
+      disabled={busy}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => {
         setIsHovering(false);
