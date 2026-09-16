@@ -224,6 +224,17 @@ export default defineSchema({
     onrampRaw: v.optional(v.string()),
     /** When the prompt was pushed, for matching against the provider's clock. */
     onrampInitiatedAt: v.optional(v.number()),
+    /**
+     * The conversion actually used, recorded per deposit.
+     *
+     * A dollar is not a USDT. Chessa quotes ~0.9975 USD per USDT, so $3 buys
+     * 3.007519 USDT — and releasing a flat 3 against a $3 deposit quietly
+     * under-funds the float by a quarter of a percent every time. The rate
+     * moves, so the figure that was used is stored rather than recomputed
+     * later from a rate that has since changed.
+     */
+    usdtReleased: v.optional(v.number()),
+    rateUsdPerUsdt: v.optional(v.number()),
     expiresAt: v.number(),
     paidAt: v.optional(v.number()),
     createdAt: v.number(),

@@ -9,7 +9,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import { normalizeE164Zimbabwe } from "./railLib";
+import { normalizeE164Zimbabwe, USDT_RATE_KEY } from "./railLib";
 
 type ChessaCryptoToEcocashResult = {
   success: true;
@@ -179,6 +179,58 @@ export const validateEcocashRecipient = action({
 });
 
 export const ECOCASH_LIMITS_KEY = "chessaEcocashLimits";
+
+/**
+ * Read and cache Chessa's USD-per-USDT rate.
+ *
+ * Asked as "what does $1 cost in USDT", which is the direction every deposit
+ * actually needs, and stored so queries — which cannot make network calls —
+ * can express a balance in tokens honestly.
+ */
+export const refreshUsdtRate = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ usdPerUsdt: number } | null> => {
+    try {
+      const client = new ConvexHttpClient(getChessaConvexUrl());
+      const rateRef = makeFunctionReference<
+        "action",
+        { from: string; to: string; amount: number },
+        { rate?: number; fromAmount?: number; toAmount?: number }
+      >("chessa:getRate");
+      const r = await client.action(rateRef, {
+        from: "USDT",
+        to: "USD",
+        amount: 1,
+      });
+
+      /*
+       * Prefer the amounts over the quoted `rate` field: toAmount/fromAmount is
+       * the conversion that was actually applied, and a provider that changes
+       * how it labels `rate` cannot silently change what we store.
+       */
+      const from = Number(r?.fromAmount);
+      const to = Number(r?.toAmount);
+      const derived =
+        Number.isFinite(from) && from > 0 && Number.isFinite(to) && to > 0
+          ? to / from
+          : Number(r?.rate);
+
+      if (!Number.isFinite(derived) || derived <= 0 || derived > 2) return null;
+
+      await ctx.runMutation(internal.deposits.setConfig, {
+        key: USDT_RATE_KEY,
+        value: JSON.stringify({ usdPerUsdt: derived, at: Date.now() }),
+      });
+      return { usdPerUsdt: derived };
+    } catch (e) {
+      console.warn(
+        "[aurum-rail] could not refresh USDT rate:",
+        e instanceof Error ? e.message : e,
+      );
+      return null;
+    }
+  },
+});
 
 /**
  * Read Chessa's live Zimbabwe limits and cache them.

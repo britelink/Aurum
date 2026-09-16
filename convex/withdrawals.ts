@@ -11,10 +11,13 @@ import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import {
   MIN_WITHDRAW_USD,
+  chessaPayoutFeeUsd,
   computeWithdrawFee,
   ecocashMinNetUsd,
   minEcocashGrossUsd,
+  minEcocashGrossWithFee,
   normalizeE164Zimbabwe,
+  quoteEcocashPayout,
   roundMoney,
 } from "./railLib";
 import { withdrawableFor, lockedExplanation } from "./withdrawable";
@@ -390,20 +393,26 @@ export async function queueEcocashPayoutFor(
    * figure nobody quoted them, and the refund path would have to know which of
    * the two numbers to give back.
    */
-  const { fee, net } = computeWithdrawFee(amount);
-
   /*
-   * Chessa's floor is on what the recipient *receives*, so it has to be checked
-   * against `net`, not against what the player typed. Checked here, before the
-   * debit, because failing after it means a refund for a limit we already knew.
+   * Three numbers, not two.
+   *
+   * `amount` leaves the balance, our fee stays with the house, and Chessa takes
+   * its own ~$1 service fee in the asset we send. That third one was never
+   * collected, which made EcoCash arithmetically impossible: our fee is a
+   * percentage, the shortfall is a constant, so no amount could cover it and
+   * the funding guard refused every payout. It is quoted now.
    */
+  const quote = quoteEcocashPayout(amount);
   const minNet = await readEcocashMinNet(ctx);
-  if (net < minNet) {
+  if (!quote || quote.delivered < minNet) {
     throw new Error(
-      `EcoCash payouts start at $${minNet.toFixed(2)} received. ` +
-        `Withdraw at least $${grossForNet(minNet).toFixed(2)} to clear it, or take this out as crypto.`,
+      `EcoCash payouts start at $${minNet.toFixed(2)} received, and carry a ` +
+        `$${chessaPayoutFeeUsd().toFixed(2)} network fee. Withdraw at least ` +
+        `$${minEcocashGrossWithFee(minNet).toFixed(2)} to clear both, or take this out as crypto.`,
     );
   }
+  const fee = quote.ourFee;
+  const net = quote.delivered;
 
   if (args.dryRun) {
     return {

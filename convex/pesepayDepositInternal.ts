@@ -177,11 +177,23 @@ export const creditPaidDeposit = internalMutation({
 
 /** The reserve transfer landed — the balance is now token-backed on chain. */
 export const markReleased = internalMutation({
-  args: { depositId: v.id("cryptoDeposits"), txHash: v.string() },
-  handler: async (ctx, { depositId, txHash }) => {
-    const row = await ctx.db.get(depositId);
+  args: {
+    depositId: v.id("cryptoDeposits"),
+    txHash: v.string(),
+    usdtReleased: v.optional(v.number()),
+    rateUsdPerUsdt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.depositId);
     if (!row || row.txHash) return;
-    await ctx.db.patch(depositId, { txHash, updatedAt: Date.now() });
+    await ctx.db.patch(args.depositId, {
+      txHash: args.txHash,
+      // The rate that was actually used, not one recomputed later from a rate
+      // that has since moved.
+      usdtReleased: args.usdtReleased,
+      rateUsdPerUsdt: args.rateUsdPerUsdt,
+      updatedAt: Date.now(),
+    });
   },
 });
 

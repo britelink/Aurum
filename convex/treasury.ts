@@ -14,20 +14,58 @@
  * and a solvency report built on a counter that has silently drifted is worse
  * than having no report at all, because it is believed.
  *
- * So the balance *is* the holding. USDT is dollar-pegged and the rail credits
- * and debits it 1:1, which is what makes the identity safe. What was missing
- * was not a number to store but a reconciliation to run: compare the sum of
- * what players are owed against what the wallet actually holds, and say plainly
- * which way the difference goes.
+ * So the balance is the **claim**, in dollars, and the token figure is that
+ * claim converted at the live rate — not asserted to be the same number. A
+ * dollar is not a USDT: Chessa quotes about 0.9975 USD per USDT, so a $3
+ * balance is 3.007519 USDT. Calling them equal understates what the float has
+ * to hold, by a quarter of a percent, permanently.
  */
-import { internalQuery, query } from "./_generated/server";
+import {
+  internalQuery,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { roundMoney } from "./railLib";
+import {
+  FALLBACK_USD_PER_USDT,
+  USDT_RATE_KEY,
+  roundAmount,
+  roundMoney,
+  usdToUsdt,
+} from "./railLib";
 import { withdrawableFor } from "./withdrawable";
 
 /** Balances below this are rounding dust, not a holding worth listing. */
 const DUST = 0.005;
+
+/**
+ * The cached USD-per-USDT rate, or the fallback when none has been stored.
+ *
+ * A query cannot fetch, so the rate is whatever the cron last wrote. Stale by
+ * minutes is fine for a display figure; asserting parity was not.
+ */
+async function cachedRate(
+  ctx: QueryCtx | MutationCtx,
+): Promise<{ usdPerUsdt: number; stale: boolean }> {
+  const row = await ctx.db
+    .query("railConfig")
+    .withIndex("by_key", (q) => q.eq("key", USDT_RATE_KEY))
+    .first();
+  if (row?.value) {
+    try {
+      const p = JSON.parse(row.value) as { usdPerUsdt?: number; at?: number };
+      const r = Number(p.usdPerUsdt);
+      if (Number.isFinite(r) && r > 0) {
+        return { usdPerUsdt: r, stale: Date.now() - (p.at ?? 0) > 864e5 };
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return { usdPerUsdt: FALLBACK_USD_PER_USDT, stale: true };
+}
 
 /**
  * Total owed to players, and the biggest holders.
@@ -44,21 +82,29 @@ export const liabilities = internalQuery({
     const truncated = users.length > scanCap;
     const rows = users.slice(0, scanCap);
 
+    const { usdPerUsdt, stale } = await cachedRate(ctx);
+
     const holders = rows
       .map((u) => ({
         userId: u._id as Id<"users">,
         email: u.email ?? null,
         name: u.name ?? null,
-        usdt: roundMoney(u.balance ?? 0),
+        usd: roundMoney(u.balance ?? 0),
+        // Converted, not assumed equal.
+        usdt: usdToUsdt(u.balance ?? 0, usdPerUsdt),
       }))
-      .filter((h) => h.usdt > DUST)
-      .sort((a, b) => b.usdt - a.usdt);
+      .filter((h) => h.usd > DUST)
+      .sort((a, b) => b.usd - a.usd);
 
     return {
       accountsScanned: rows.length,
       truncated,
+      usdPerUsdt,
+      rateStale: stale,
       holderCount: holders.length,
-      totalOwedUsdt: roundMoney(holders.reduce((s, h) => s + h.usdt, 0)),
+      totalOwedUsd: roundMoney(holders.reduce((s, h) => s + h.usd, 0)),
+      /** What the float must actually hold in tokens to cover the claims. */
+      totalOwedUsdt: roundAmount(holders.reduce((s, h) => s + h.usdt, 0)),
       topHolders: holders.slice(0, Math.min(args.limit ?? 25, 100)),
     };
   },
@@ -128,11 +174,13 @@ export const myHolding = query({
       )?.value ??
       null;
 
+    const { usdPerUsdt } = await cachedRate(ctx);
+
     return {
       balanceUsd: roundMoney(user.balance ?? 0),
-      // 1:1 by construction: the rail credits and debits USDT against this
-      // balance directly, and USDT is dollar-pegged.
-      holdingUsdt: roundMoney(user.balance ?? 0),
+      // Converted at the live rate. A dollar is not a token.
+      holdingUsdt: usdToUsdt(user.balance ?? 0, usdPerUsdt),
+      usdPerUsdt,
       asset: "USDT",
       chain: "BNB Smart Chain (BEP20)",
       custodyAddress: address,
@@ -175,7 +223,7 @@ export const playerStatement = internalQuery({
       found: true as const,
       email: user.email ?? null,
       balanceUsd: w.balance,
-      holdingUsdt: w.balance,
+      holdingUsdt: usdToUsdt(w.balance, (await cachedRate(ctx)).usdPerUsdt),
       deposited: w.deposited,
       withdrawn: w.withdrawn,
       withdrawableToday: w.withdrawable,

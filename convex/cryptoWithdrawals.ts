@@ -20,12 +20,15 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { readEcocashMinNet, grossForNet } from "./withdrawals";
+import { readEcocashMinNet } from "./withdrawals";
 import { withdrawableFor, lockedExplanation } from "./withdrawable";
 import {
   INBOUND_CHAIN,
   MIN_WITHDRAW_USD,
+  chessaPayoutFeeUsd,
   computeWithdrawFee,
+  minEcocashGrossWithFee,
+  quoteEcocashPayout,
   explorerAddressUrl,
   explorerTxUrl,
   isEvmAddress,
@@ -317,6 +320,7 @@ export const quoteWithdrawal = query({
     // Chessa's live floor when we have it cached, our constant otherwise.
     const minNet = await readEcocashMinNet(ctx);
     const gross = roundMoney(amount);
+    const eco = quoteEcocashPayout(gross);
     const identity = await ctx.auth.getUserIdentity();
     const allowance = identity
       ? await withdrawableFor(
@@ -347,9 +351,13 @@ export const quoteWithdrawal = query({
        * clear Chessa's floor, instead of letting it fail at their end and come
        * back as a refund plus an unreadable error.
        */
+      // EcoCash carries a third cost -- Chessa's flat service fee -- so it gets
+      // its own quote rather than reusing the crypto net.
       ecocashMinNet: minNet,
-      ecocashMinGross: grossForNet(minNet),
-      ecocashOk: net >= minNet,
+      ecocashMinGross: minEcocashGrossWithFee(minNet),
+      ecocashFee: chessaPayoutFeeUsd(),
+      ecocashDelivered: eco?.delivered ?? null,
+      ecocashOk: Boolean(eco && eco.delivered >= minNet),
       withdrawable: allowance?.withdrawable ?? null,
       lockedWinnings: allowance?.locked ?? null,
       overAllowance: allowance ? gross > allowance.withdrawable + 1e-9 : false,

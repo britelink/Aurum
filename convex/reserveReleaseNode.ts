@@ -28,10 +28,12 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import {
+  FALLBACK_USD_PER_USDT,
   agentPrivateKey,
   bscRpcUrls,
   isNonceConflict,
   tokenAddresses,
+  usdToUsdt,
 } from "./railLib";
 import { AGENT_WALLET_LOCK } from "./sendLock";
 
@@ -131,15 +133,28 @@ export const releaseForEcocashDeposit = internalAction({
       const contract = new ethers.Contract(token, ERC20_ABI, signer);
 
       const decimals = Number(await contract.decimals());
-      const amount = ethers.parseUnits(
-        row.amountRequested.toFixed(6),
-        decimals,
-      );
+
+      /*
+       * Convert, do not assume parity.
+       *
+       * The player deposited dollars; the float is held in USDT, and Chessa
+       * quotes about 0.9975 USD per USDT. Releasing `amountRequested` as though
+       * a dollar were a token under-funds the wallet by ~0.25% on every
+       * deposit — invisible per transaction, permanent in aggregate.
+       */
+      const rate = (await ctx.runAction(
+        internal.chessaBridge.refreshUsdtRate,
+        {},
+      )) as { usdPerUsdt: number } | null;
+      const usdPerUsdt = rate?.usdPerUsdt ?? FALLBACK_USD_PER_USDT;
+      const usdtToSend = usdToUsdt(row.amountRequested, usdPerUsdt);
+
+      const amount = ethers.parseUnits(usdtToSend.toFixed(6), decimals);
 
       const held: bigint = await contract.balanceOf(signer.address);
       if (held < amount) {
         await note(
-          `Reserve holds ${ethers.formatUnits(held, decimals)} USDT, needs ${row.amountRequested}. ` +
+          `Reserve holds ${ethers.formatUnits(held, decimals)} USDT, needs ${usdtToSend}. ` +
             "The player was credited; top up the reserve and re-run the release.",
         );
         return { failed: true, reason: "reserve short" };
@@ -166,8 +181,10 @@ export const releaseForEcocashDeposit = internalAction({
       await ctx.runMutation(internal.pesepayDepositInternal.markReleased, {
         depositId,
         txHash,
+        usdtReleased: usdtToSend,
+        rateUsdPerUsdt: usdPerUsdt,
       });
-      return { released: true, txHash, amount: row.amountRequested };
+      return { released: true, txHash, usdt: usdtToSend, usdPerUsdt };
     } catch (e) {
       await note(e instanceof Error ? e.message : String(e));
       return { failed: true };

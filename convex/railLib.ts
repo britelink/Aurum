@@ -386,3 +386,94 @@ export function isNonceConflict(e: unknown): boolean {
     msg.includes("invalid nonce")
   );
 }
+
+
+/**
+ * Where the cached USD-per-USDT rate lives.
+ *
+ * A dollar is not a USDT: Chessa quotes about 0.9975 USD per USDT, so a $3
+ * deposit is 3.007519 USDT. Treating them as equal under-funds the float on
+ * every deposit and overstates what a balance is worth in tokens — small per
+ * transaction, and permanent.
+ *
+ * Cached because the rate is fetched over the network and the paths that need
+ * it include queries, which cannot fetch at all.
+ */
+export const USDT_RATE_KEY = "chessaUsdPerUsdt";
+
+/** Falls back to par only when no rate has ever been cached. Par is a guess. */
+export const FALLBACK_USD_PER_USDT = 0.9975;
+
+/** USD → USDT at a given rate (USD per USDT). */
+export function usdToUsdt(usd: number, usdPerUsdt: number): number {
+  const rate =
+    Number.isFinite(usdPerUsdt) && usdPerUsdt > 0
+      ? usdPerUsdt
+      : FALLBACK_USD_PER_USDT;
+  return roundAmount(usd / rate, 6);
+}
+
+/** USDT → USD at a given rate. */
+export function usdtToUsd(usdt: number, usdPerUsdt: number): number {
+  const rate =
+    Number.isFinite(usdPerUsdt) && usdPerUsdt > 0
+      ? usdPerUsdt
+      : FALLBACK_USD_PER_USDT;
+  return roundMoney(usdt * rate);
+}
+
+
+/**
+ * Chessa's own service fee on an EcoCash payout, in USD.
+ *
+ * Charged **on top of** the amount delivered, and in the asset we send: their
+ * orders on this account quoted 3.01 USDT to deliver $2.00 and 5.02 to deliver
+ * ~$4.00 — a flat ~$1.01, not a percentage.
+ *
+ * It was never collected from the player, which made EcoCash arithmetically
+ * impossible rather than merely expensive: our fee is a percentage and the
+ * shortfall is a constant, so no amount could ever cover it and the guard
+ * refused every one. Now it is quoted, so the player sees the real cost and
+ * the float is never asked to absorb it.
+ *
+ * An estimate, because Chessa exposes it only on order creation — `getRate`
+ * returns the rate alone. Set slightly above the observed figure: quoting a
+ * little high refunds the difference to nobody, while quoting low reproduces
+ * exactly the failure this exists to remove.
+ */
+export const DEFAULT_CHESSA_PAYOUT_FEE_USD = 1.1;
+
+export function chessaPayoutFeeUsd(): number {
+  const raw = process.env.AURUM_CHESSA_PAYOUT_FEE_USD?.trim();
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_CHESSA_PAYOUT_FEE_USD;
+}
+
+/**
+ * What an EcoCash cash-out really costs the player.
+ *
+ * `gross` leaves their balance; `delivered` reaches the recipient. Between them
+ * sit our fee and Chessa's. Returns null when the gross cannot cover both —
+ * which is the honest answer for small amounts, not something to paper over.
+ */
+export function quoteEcocashPayout(gross: number): {
+  gross: number;
+  ourFee: number;
+  chessaFee: number;
+  delivered: number;
+} | null {
+  const { fee: ourFee } = computeWithdrawFee(gross);
+  const chessaFee = chessaPayoutFeeUsd();
+  const delivered = roundMoney(gross - ourFee - chessaFee);
+  if (delivered <= 0) return null;
+  return { gross: roundMoney(gross), ourFee, chessaFee, delivered };
+}
+
+/** Smallest gross that both covers Chessa's fee and clears their floor. */
+export function minEcocashGrossWithFee(minNet: number): number {
+  for (let cents = 1; cents <= 100_000; cents++) {
+    const q = quoteEcocashPayout(cents / 100);
+    if (q && q.delivered >= minNet - 1e-9) return q.gross;
+  }
+  return roundMoney(minNet + chessaPayoutFeeUsd() + 1);
+}

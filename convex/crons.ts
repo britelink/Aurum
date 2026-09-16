@@ -55,6 +55,15 @@ crons.interval(
 
 // Chessa's payout floor is theirs to change; follow it rather than shipping a
 // copy that goes stale. Six hours is far more often than a limit moves.
+// A dollar is not a USDT, and the rate moves. Hourly is far more often than it
+// meaningfully drifts, and it keeps queries able to convert without fetching.
+crons.interval(
+  "refresh usdt rate",
+  { hours: 1 },
+  internal.chessaBridge.refreshUsdtRate,
+  {},
+);
+
 crons.interval(
   "refresh chessa ecocash limits",
   { hours: 6 },

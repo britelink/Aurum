@@ -212,8 +212,8 @@ export default function WithdrawPanel() {
             icon="📱"
             title="EcoCash"
             subtitle={
-              quote?.ecocashMinNet
-                ? `Zimbabwe mobile money — from $${quote.ecocashMinNet.toFixed(2)}`
+              quote?.ecocashMinGross
+                ? `Zimbabwe mobile money — from $${quote.ecocashMinGross.toFixed(2)}`
                 : "Zimbabwe mobile money, via Chessa"
             }
             onClick={() => {
@@ -271,13 +271,38 @@ export default function WithdrawPanel() {
             {quote?.valid === false && quote.message && !overBalance && (
               <p className="text-xs text-slate-500">{quote.message}</p>
             )}
+            {/*
+              Say the number, and whether they have it. "Too small" without the
+              figure that works just moves the guessing to the player.
+            */}
             {ecocashTooSmall && quote?.valid && (
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                EcoCash pays out from ${quote.ecocashMinNet?.toFixed(2)} received.
-                Withdraw at least ${quote.ecocashMinGross?.toFixed(2)}, or take
-                this out as crypto — that has no minimum beyond $
-                {MIN_WITHDRAW.toFixed(2)}.
-              </p>
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/50 dark:bg-amber-900/20">
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  EcoCash needs at least{" "}
+                  <strong>${quote.ecocashMinGross?.toFixed(2)}</strong> — it
+                  carries a ${quote.ecocashFee?.toFixed(2)} network fee on top of
+                  ours, and pays out from $
+                  {quote.ecocashMinNet?.toFixed(2)} received.
+                </p>
+                {(quote.ecocashMinGross ?? 0) <= withdrawable ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAmount((quote.ecocashMinGross ?? 0).toFixed(2))
+                    }
+                    className="mt-2 text-xs font-medium text-amber-900 underline underline-offset-2 dark:text-amber-200"
+                  >
+                    Use ${quote.ecocashMinGross?.toFixed(2)}
+                  </button>
+                ) : (
+                  <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
+                    You have ${withdrawable.toFixed(2)} — $
+                    {((quote.ecocashMinGross ?? 0) - withdrawable).toFixed(2)}{" "}
+                    short. Take it out as crypto instead: no network fee, and
+                    the minimum is ${MIN_WITHDRAW.toFixed(2)}.
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
@@ -375,13 +400,21 @@ export default function WithdrawPanel() {
               }
             />
             <ReviewRow label="Leaving your balance" value={`$${quote.gross.toFixed(2)}`} />
-            <ReviewRow label="Fee" value={`$${quote.fee.toFixed(2)}`} />
+            <ReviewRow label="Our fee" value={`$${quote.fee.toFixed(2)}`} />
+            {/* Chessa's fee is real money the player pays; showing only ours
+                would be quoting two thirds of the price. */}
+            {method === "ecocash" && (
+              <ReviewRow
+                label="EcoCash network fee"
+                value={`$${(quote.ecocashFee ?? 0).toFixed(2)}`}
+              />
+            )}
             <ReviewRow
               label={method === "crypto" ? "You receive" : "They receive"}
               value={
                 method === "crypto"
                   ? `${quote.net.toFixed(2)} USDT`
-                  : `$${quote.net.toFixed(2)}`
+                  : `$${(quote.ecocashDelivered ?? quote.net).toFixed(2)}`
               }
               emphasis
             />
