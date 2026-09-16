@@ -24,6 +24,7 @@ import type * as gameEngine from "../gameEngine.js";
 import type * as gameLib from "../gameLib.js";
 import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
+import type * as migrations from "../migrations.js";
 import type * as onChainBalances from "../onChainBalances.js";
 import type * as railLib from "../railLib.js";
 import type * as railsSandbox from "../railsSandbox.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   gameLib: typeof gameLib;
   helpers: typeof helpers;
   http: typeof http;
+  migrations: typeof migrations;
   onChainBalances: typeof onChainBalances;
   railLib: typeof railLib;
   railsSandbox: typeof railsSandbox;

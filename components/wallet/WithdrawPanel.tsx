@@ -1,31 +1,37 @@
 "use client";
 
 /**
- * Withdraw — crypto to the player's own wallet, or EcoCash via the Chessa rail.
+ * Withdraw — a three-step wizard.
  *
- * Two destinations, one fee, quoted before the player commits: `quoteWithdrawal`
- * is a pure query calling the same `computeWithdrawFee` the mutation charges
- * with, so the figure on screen cannot drift from the figure taken.
+ *   destination → details → review → (send)
  *
- * Both paths debit the balance in the mutation that queues them and refund it
- * on any terminal failure, so a payout that never left is never money the
- * player has lost track of. The idempotency key is minted once per attempt and
- * held in a ref: a double-click returns the first payout rather than opening a
- * second.
+ * The EcoCash branch asks the network who owns the number and shows that name
+ * back before anything is committed. The form used to ask the player to type
+ * their own first and last name, which was theatre: Chessa runs its own
+ * name-enquiry and overwrites whatever name we send, so a typed name could
+ * never have caught a wrong digit. A name returned *by the network* can — a
+ * mistyped number stops being invisible and becomes an unfamiliar name on the
+ * confirmation screen.
+ *
+ * Nothing is debited until the final button. The idempotency key is minted once
+ * per attempt and held in a ref, so a double-click returns the first payout
+ * rather than opening a second.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, ExternalLink } from "lucide-react";
+import { CheckCircle2, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { cn } from "@/lib/utils";
-import { Notice, PanelSpinner, Row } from "./DepositPanel";
+import { PanelSpinner } from "./DepositPanel";
+import { BackLink, Choice, ReviewCard, ReviewRow, Steps } from "./Wizard";
 
 type Method = "crypto" | "ecocash";
+const STEPS = ["Destination", "Details", "Confirm"];
 
 function newIdempotencyKey(): string {
   return `aurw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -33,62 +39,69 @@ function newIdempotencyKey(): string {
 
 export default function WithdrawPanel() {
   const me = useQuery(api.aurum.myBalance);
-  const cryptoPayouts = useQuery(api.cryptoWithdrawals.myCryptoPayouts, {
-    limit: 5,
-  });
+  const cryptoPayouts = useQuery(api.cryptoWithdrawals.myCryptoPayouts, { limit: 5 });
   const ecocashPayouts = useQuery(api.withdrawals.getMyPayouts, { limit: 5 });
 
-  const requestCrypto = useMutation(
-    api.cryptoWithdrawals.requestCryptoWithdrawal,
-  );
+  const requestCrypto = useMutation(api.cryptoWithdrawals.requestCryptoWithdrawal);
   const requestEcocash = useMutation(api.withdrawals.requestEcocashWithdrawal);
+  const validateRecipient = useAction(api.chessaBridge.validateEcocashRecipient);
 
-  const [method, setMethod] = useState<Method>("crypto");
+  const [step, setStep] = useState(0);
+  const [method, setMethod] = useState<Method | null>(null);
   const [amount, setAmount] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Minted per attempt, not per render: a re-render must not produce a new key
-  // and turn a retry into a second payout.
+  const [checking, setChecking] = useState(false);
+  const [verified, setVerified] = useState<{ name: string; phone: string } | null>(null);
+  const [checkError, setCheckError] = useState<string | null>(null);
+
   const keyRef = useRef<string>(newIdempotencyKey());
 
   const parsed = Number(amount);
   const quote = useQuery(api.cryptoWithdrawals.quoteWithdrawal, {
     amount: Number.isFinite(parsed) && parsed > 0 ? parsed : 0,
   });
-
   const balance = me?.balance ?? 0;
 
-  // Prefill from whatever the player used last, once their profile arrives.
-  // An effect, not a memo: this sets state, and doing that during render is how
-  // a "cheap" prefill turns into a render loop.
   useEffect(() => {
     if (me?.payoutAddress && !address) setAddress(me.payoutAddress);
     if (me?.payoutPhone && !phone) setPhone(me.payoutPhone);
-    if (me?.name && !firstName) {
-      const parts = me.name.trim().split(" ");
-      setFirstName(parts[0] ?? "");
-      setLastName(parts.slice(1).join(" "));
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me?.payoutAddress, me?.payoutPhone, me?.name]);
+  }, [me?.payoutAddress, me?.payoutPhone]);
+
+  // A changed number invalidates the name checked against the old one.
+  useEffect(() => {
+    setVerified(null);
+    setCheckError(null);
+  }, [phone]);
 
   if (me === undefined) return <PanelSpinner />;
 
   const overBalance = parsed > balance;
+  const amountOk = quote?.valid === true && !overBalance;
+  const addressOk = /^0x[a-fA-F0-9]{40}$/.test(address.trim());
 
-  const submit = async () => {
-    if (!quote?.valid) {
-      toast.error(quote?.message ?? "Enter a valid amount");
-      return;
+  const check = async () => {
+    setChecking(true);
+    setCheckError(null);
+    try {
+      const res = await validateRecipient({ phone });
+      if (res.validated && res.name) {
+        setVerified({ name: res.name, phone: res.phone });
+      } else {
+        setCheckError(res.error ?? "That number could not be checked.");
+      }
+    } catch (e) {
+      setCheckError(e instanceof Error ? e.message : "Could not check that number");
+    } finally {
+      setChecking(false);
     }
-    if (overBalance) {
-      toast.error("That is more than your balance");
-      return;
-    }
+  };
+
+  const send = async () => {
+    if (!quote?.valid) return;
     setBusy(true);
     try {
       if (method === "crypto") {
@@ -98,19 +111,21 @@ export default function WithdrawPanel() {
           asset: "USDT",
           idempotencyKey: keyRef.current,
         });
-        toast.success("Payout queued — it goes out within a minute");
+        toast.success(`Sending ${quote.net.toFixed(2)} USDT`);
       } else {
         await requestEcocash({
           amount: parsed,
-          ecocashPhone: phone.trim(),
-          firstName: firstName.trim() || "Player",
-          lastName: lastName.trim() || "User",
+          // The number the network confirmed, not the raw input.
+          ecocashPhone: verified?.phone ?? phone.trim(),
+          recipientName: verified?.name,
           idempotencyKey: keyRef.current,
         });
-        toast.success("Cash-out queued — EcoCash usually lands in a few minutes");
+        toast.success(`Sending $${quote.net.toFixed(2)} to ${verified?.name}`);
       }
       keyRef.current = newIdempotencyKey();
       setAmount("");
+      setStep(0);
+      setMethod(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Withdrawal failed";
       toast.error(msg.split("\n").pop() ?? msg);
@@ -119,137 +134,210 @@ export default function WithdrawPanel() {
     }
   };
 
-  const canSubmit =
-    !busy &&
-    quote?.valid === true &&
-    !overBalance &&
-    (method === "crypto"
-      ? /^0x[a-fA-F0-9]{40}$/.test(address.trim())
-      : phone.trim().length >= 9);
-
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-2">
-        <MethodTab
-          active={method === "crypto"}
-          onClick={() => setMethod("crypto")}
-          title="Crypto"
-          subtitle="USDT on BNB Chain"
-        />
-        <MethodTab
-          active={method === "ecocash"}
-          onClick={() => setMethod("ecocash")}
-          title="EcoCash"
-          subtitle="Zimbabwe, via Chessa"
-        />
-      </div>
+    <div className="space-y-6">
+      <Steps steps={STEPS} current={step} />
 
-      <div className="space-y-2">
-        <div className="flex items-baseline justify-between">
-          <Label htmlFor="withdraw-amount">Amount</Label>
-          <button
-            onClick={() => setAmount(balance.toFixed(2))}
-            className="text-xs text-slate-500 underline-offset-2 hover:underline"
-          >
-            Balance ${balance.toFixed(2)} — use all
-          </button>
-        </div>
-        <Input
-          id="withdraw-amount"
-          type="number"
-          inputMode="decimal"
-          placeholder="0.00"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className={cn(overBalance && "border-rose-400")}
-        />
-      </div>
-
-      {method === "crypto" ? (
-        <div className="space-y-2">
-          <Label htmlFor="withdraw-address">Your BEP-20 address</Label>
-          <Input
-            id="withdraw-address"
-            placeholder="0x…"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className="font-mono text-sm"
+      {step === 0 && (
+        <div className="space-y-3">
+          <p className="text-sm text-slate-500">Where should the money go?</p>
+          <Choice
+            icon="₮"
+            title="Crypto"
+            subtitle="USDT to your own wallet on BNB Chain"
+            onClick={() => {
+              setMethod("crypto");
+              setStep(1);
+            }}
           />
-          <p className="text-xs text-slate-500">
-            BNB Smart Chain only. An address on another network loses the funds —
-            there is no recall.
+          <Choice
+            icon="📱"
+            title="EcoCash"
+            subtitle="Zimbabwe mobile money, via Chessa"
+            onClick={() => {
+              setMethod("ecocash");
+              setStep(1);
+            }}
+          />
+          <p className="pt-1 text-xs text-slate-500">
+            Balance ${balance.toFixed(2)}
           </p>
         </div>
-      ) : (
-        <div className="space-y-4">
+      )}
+
+      {step === 1 && (
+        <div className="space-y-5">
+          <BackLink onClick={() => setStep(0)} />
+
           <div className="space-y-2">
-            <Label htmlFor="withdraw-phone">EcoCash number</Label>
-            <Input
-              id="withdraw-phone"
-              placeholder="0771234567"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="withdraw-first">First name</Label>
+            <div className="flex items-baseline justify-between">
+              <Label htmlFor="withdraw-amount">How much?</Label>
+              <button
+                type="button"
+                onClick={() => setAmount(balance.toFixed(2))}
+                className="text-xs text-slate-500 underline-offset-2 hover:underline"
+              >
+                All ${balance.toFixed(2)}
+              </button>
+            </div>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                $
+              </span>
               <Input
-                id="withdraw-first"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
+                id="withdraw-amount"
+                type="number"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className={cn("pl-7 text-lg", overBalance && "border-rose-400")}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="withdraw-last">Last name</Label>
-              <Input
-                id="withdraw-last"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-              />
-            </div>
+            {overBalance && (
+              <p className="text-xs text-rose-600">
+                That is more than your balance.
+              </p>
+            )}
+            {quote?.valid === false && quote.message && !overBalance && (
+              <p className="text-xs text-slate-500">{quote.message}</p>
+            )}
           </div>
-          <p className="text-xs text-slate-500">
-            The name must match the EcoCash account, or the payout is rejected
-            and refunded.
-          </p>
+
+          {method === "crypto" ? (
+            <div className="space-y-2">
+              <Label htmlFor="withdraw-address">Your BEP-20 address</Label>
+              <Input
+                id="withdraw-address"
+                placeholder="0x…"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-slate-500">
+                BNB Smart Chain only. An address on another network loses the
+                funds — there is no recall.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="withdraw-phone">EcoCash number</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="withdraw-phone"
+                  placeholder="0771234567"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={check}
+                  disabled={checking || phone.replace(/\D/g, "").length < 9}
+                >
+                  {checking ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Check"
+                  )}
+                </Button>
+              </div>
+
+              {verified && (
+                <div className="flex items-start gap-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-700/50 dark:bg-emerald-900/20">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      {verified.name}
+                    </p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                      EcoCash confirmed this account. If that is not you, fix the
+                      number.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {checkError && (
+                <p className="text-xs text-rose-600">{checkError}</p>
+              )}
+              {!verified && !checkError && (
+                <p className="text-xs text-slate-500">
+                  We check the name on the account before sending anything.
+                </p>
+              )}
+            </div>
+          )}
+
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={
+              !amountOk || (method === "crypto" ? !addressOk : !verified)
+            }
+            onClick={() => setStep(2)}
+          >
+            Review
+          </Button>
         </div>
       )}
 
-      {quote?.valid && (
-        <dl className="space-y-1.5 rounded-lg bg-slate-50 p-4 text-sm dark:bg-gray-800/50">
-          <Row label="Withdrawing" value={`$${quote.gross.toFixed(2)}`} />
-          <Row label="Fee" value={`$${quote.fee.toFixed(2)}`} />
-          <Row
-            label={method === "crypto" ? "You receive" : "Recipient gets"}
-            value={
-              method === "crypto"
-                ? `${quote.net.toFixed(2)} USDT`
-                : `$${quote.net.toFixed(2)}`
-            }
-            highlight
-          />
-        </dl>
-      )}
+      {step === 2 && quote?.valid && (
+        <div className="space-y-5">
+          <BackLink onClick={() => setStep(1)} />
 
-      <Button
-        onClick={submit}
-        disabled={!canSubmit}
-        className="w-full"
-        size="lg"
-      >
-        {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        {method === "crypto" ? "Send USDT" : "Cash out to EcoCash"}
-      </Button>
+          <ReviewCard>
+            {method === "ecocash" && verified && (
+              <ReviewRow label="Paying" value={verified.name} />
+            )}
+            <ReviewRow
+              label="To"
+              value={
+                method === "crypto"
+                  ? `${address.slice(0, 10)}…${address.slice(-6)}`
+                  : (verified?.phone ?? phone)
+              }
+            />
+            <ReviewRow label="Leaving your balance" value={`$${quote.gross.toFixed(2)}`} />
+            <ReviewRow label="Fee" value={`$${quote.fee.toFixed(2)}`} />
+            <ReviewRow
+              label={method === "crypto" ? "You receive" : "They receive"}
+              value={
+                method === "crypto"
+                  ? `${quote.net.toFixed(2)} USDT`
+                  : `$${quote.net.toFixed(2)}`
+              }
+              emphasis
+            />
+            <ReviewRow
+              label="Balance after"
+              value={`$${(balance - quote.gross).toFixed(2)}`}
+              muted
+            />
+          </ReviewCard>
+
+          <Button className="w-full" size="lg" disabled={busy} onClick={send}>
+            {busy ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+            )}
+            {method === "crypto"
+              ? `Send ${quote.net.toFixed(2)} USDT`
+              : `Send $${quote.net.toFixed(2)} to EcoCash`}
+          </Button>
+          <p className="text-center text-xs text-slate-500">
+            This cannot be undone once it is on chain.
+          </p>
+        </div>
+      )}
 
       <PayoutHistory
         crypto={cryptoPayouts ?? []}
         ecocash={(ecocashPayouts ?? []).map((p) => ({
           id: p._id,
           status: p.status,
-          amountUsd: p.amountUsd,
           netUsd: p.netUsd ?? p.amountUsd,
-          phone: p.ecocashPhone,
+          who: p.recipientName ?? p.ecocashPhone,
           error: p.sgxError ?? null,
           createdAt: p.createdAt,
         }))}
@@ -258,40 +346,10 @@ export default function WithdrawPanel() {
   );
 }
 
-function MethodTab(props: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <button
-      onClick={props.onClick}
-      className={cn(
-        "rounded-lg border p-3 text-left transition-colors",
-        props.active
-          ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
-          : "border-slate-200 text-slate-600 hover:border-slate-300 dark:border-gray-700 dark:text-slate-300",
-      )}
-    >
-      <div className="font-medium">{props.title}</div>
-      <div
-        className={cn(
-          "text-xs",
-          props.active ? "opacity-70" : "text-slate-400",
-        )}
-      >
-        {props.subtitle}
-      </div>
-    </button>
-  );
-}
-
 function PayoutHistory(props: {
   crypto: Array<{
     id: string;
     status: string;
-    amountUsd: number;
     amountToken: number;
     txHash: string | null;
     txUrl: string | null;
@@ -301,9 +359,8 @@ function PayoutHistory(props: {
   ecocash: Array<{
     id: string;
     status: string;
-    amountUsd: number;
     netUsd: number;
-    phone: string;
+    who: string;
     error: string | null;
     createdAt: number;
   }>;
@@ -322,7 +379,7 @@ function PayoutHistory(props: {
       key: e.id,
       when: e.createdAt,
       label: `$${e.netUsd.toFixed(2)} EcoCash`,
-      detail: e.phone,
+      detail: e.who,
       href: null as string | null,
       status: e.status,
       error: e.error,
@@ -339,15 +396,18 @@ function PayoutHistory(props: {
         Recent payouts
       </p>
       {rows.map((r) => (
-        <div
-          key={r.key}
-          className="flex items-center justify-between gap-3 text-sm"
-        >
+        <div key={r.key} className="flex items-start justify-between gap-3 text-sm">
           <div className="min-w-0">
             <div className="font-medium text-slate-900 dark:text-slate-100">
               {r.label}
             </div>
-            <div className="truncate text-xs text-slate-500">
+            <div
+              className={cn(
+                "truncate text-xs",
+                r.error ? "text-rose-600" : "text-slate-500",
+              )}
+              title={r.error ?? undefined}
+            >
               {r.error ?? r.detail}
             </div>
           </div>
@@ -388,5 +448,3 @@ function StatusPill({ status }: { status: string }) {
     </span>
   );
 }
-
-export { Notice };

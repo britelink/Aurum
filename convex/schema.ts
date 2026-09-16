@@ -280,8 +280,18 @@ export default defineSchema({
     transactionId: v.id("transactions"),
     idempotencyKey: v.string(),
     ecocashPhone: v.string(), // E.164 e.g. +263771234567
-    firstName: v.string(),
-    lastName: v.string(),
+    /**
+     * The name EcoCash returned for this number, captured at quote time.
+     *
+     * Not something the player types. Chessa's name-enquiry is authoritative and
+     * `v0public.cryptoToEcocash` overwrites any name we send with the real one,
+     * so a typed name never reached the payout -- it was decoration on a form.
+     * This is the name the player was actually shown and confirmed.
+     */
+    recipientName: v.optional(v.string()),
+    /** Legacy: split name from the old form. Kept for rows written before the check. */
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     /** Debited from the balance, gross (fee included). */
     amountUsd: v.number(),
     /** Withdrawal fee kept by the house. Absent on rows written before fees. */

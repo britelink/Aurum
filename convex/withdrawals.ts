@@ -193,8 +193,8 @@ export async function queueEcocashPayoutFor(
   args: {
     amount: number;
     ecocashPhone: string;
-    firstName: string;
-    lastName: string;
+    /** The name EcoCash returned, as shown to the player on the quote. */
+    recipientName?: string;
     idempotencyKey: string;
     dryRun?: boolean;
   },
@@ -279,8 +279,7 @@ export async function queueEcocashPayoutFor(
     transactionId,
     idempotencyKey,
     ecocashPhone: phone,
-    firstName: args.firstName.trim() || "Player",
-    lastName: args.lastName.trim() || "User",
+    recipientName: args.recipientName?.trim() || undefined,
     amountUsd: amount,
     feeUsd: fee,
     netUsd: net,
@@ -314,8 +313,12 @@ export const requestEcocashWithdrawal = mutation({
   args: {
     amount: v.number(),
     ecocashPhone: v.string(),
-    firstName: v.string(),
-    lastName: v.string(),
+    /**
+     * Optional, and never trusted as identity. Chessa's name-enquiry decides who
+     * is paid; this is only the name the player saw on the confirmation screen,
+     * stored so a dispute can be read back against what they agreed to.
+     */
+    recipientName: v.optional(v.string()),
     idempotencyKey: v.string(),
   },
   handler: async (ctx, args) => {

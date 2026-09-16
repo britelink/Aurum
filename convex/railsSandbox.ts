@@ -423,8 +423,8 @@ export const drillWithdrawEcocash = internalMutation({
     userId: v.id("users"),
     amount: v.number(),
     ecocashPhone: v.string(),
-    firstName: v.string(),
-    lastName: v.string(),
+    /** The name EcoCash returned, as the wallet would have shown it. */
+    recipientName: v.optional(v.string()),
     idempotencyKey: v.string(),
     dryRun: v.optional(v.boolean()),
   },
@@ -433,8 +433,7 @@ export const drillWithdrawEcocash = internalMutation({
     return await queueEcocashPayoutFor(ctx, args.userId, {
       amount: args.amount,
       ecocashPhone: args.ecocashPhone,
-      firstName: args.firstName,
-      lastName: args.lastName,
+      recipientName: args.recipientName,
       idempotencyKey: args.idempotencyKey,
       dryRun: args.dryRun !== false,
     });

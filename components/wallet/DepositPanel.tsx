@@ -1,19 +1,19 @@
 "use client";
 
 /**
- * Deposit — crypto only.
+ * Deposit — a three-step wizard.
  *
- * The card/Zimswitch/EcoCash deposit widget this replaces never settled a live
- * payment, so the flow it implied (pick a provider, get redirected, come back
- * and hope) is gone. What is here is the only path that works: the rail quotes
- * an address and an **exact amount**, the player sends it, and the on-chain
- * watcher credits them.
+ *   method → amount → review → (pay)
  *
- * The exact amount is the whole mechanism and the screen says so, because a
- * player who rounds it is the one case the backend has to resolve by hand. Two
- * decimals of the figure are a tag that tells their transfer from everyone
- * else's into the same wallet — the rail forgives up to 20 cents of rounding,
- * but only while no other open quote sits in the same band.
+ * Both routes end at the same place: a transfer of one exact, tagged amount
+ * into the agent wallet, which the on-chain watcher matches and credits.
+ * "Send crypto" has the player make that transfer; "Pay with EcoCash" has SGX
+ * make it for them. There is no second crediting path, which is why a player
+ * with no crypto at all can still fund a game.
+ *
+ * The exact amount is the whole mechanism, so the review step shows it before
+ * anything is quoted and the pay step shows nothing louder than it. A player
+ * who rounds that figure is the one case the backend cannot settle alone.
  */
 
 import { useState } from "react";
@@ -22,43 +22,38 @@ import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Check, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { cn } from "@/lib/utils";
+import { BackLink, Choice, ReviewCard, ReviewRow, Steps } from "./Wizard";
+
+type Route = "send" | "ecocash";
+const STEPS = ["Method", "Amount", "Confirm"];
+
+/** SGX takes 2% off the fiat, so delivering X costs X/(1-0.02) — not X×1.02. */
+function fiatForCrypto(usdt: number): number {
+  return Math.round((usdt / 0.98 + 0.005) * 100) / 100;
+}
 
 export default function DepositPanel() {
   const rail = useQuery(api.deposits.depositRailStatus);
   const open = useQuery(api.deposits.myOpenDeposit);
   const createDeposit = useMutation(api.deposits.createDeposit);
   const cancelDeposit = useMutation(api.deposits.cancelDeposit);
-
   const topUpWithEcocash = useAction(api.buyCrypto.topUpWithEcocash);
 
+  const [step, setStep] = useState(0);
+  const [route, setRoute] = useState<Route | null>(null);
   const [amount, setAmount] = useState("10");
-  const [asset, setAsset] = useState("USDT");
-  const [busy, setBusy] = useState(false);
   const [phone, setPhone] = useState("");
-  /*
-   * Two ways to fund the same deposit.
-   *
-   * "send" quotes an address and waits for the player's own transfer.
-   * "ecocash" asks SGX to make that identical transfer on their behalf, so
-   * somebody holding no crypto at all can still sit down at the table. Both end
-   * at the same watcher and the same credit — the tab only decides who sends
-   * the USDT.
-   */
-  const [route, setRoute] = useState<"send" | "ecocash">("send");
+  const [busy, setBusy] = useState(false);
+  const [ecocashRef, setEcocashRef] = useState<{
+    reference: string;
+    fiatAmount: number;
+    phone: string;
+  } | null>(null);
 
-  if (rail === undefined || open === undefined) {
-    return <PanelSpinner />;
-  }
+  if (rail === undefined || open === undefined) return <PanelSpinner />;
 
   if (!rail.available) {
     return (
@@ -69,6 +64,21 @@ export default function DepositPanel() {
     );
   }
 
+  // An EcoCash prompt is out; the player is on their phone, not this screen.
+  if (ecocashRef) {
+    return (
+      <EcocashPending
+        info={ecocashRef}
+        onDone={() => {
+          setEcocashRef(null);
+          setStep(0);
+          setRoute(null);
+        }}
+      />
+    );
+  }
+
+  // Money is already in flight toward a quote — that outranks starting another.
   if (open) {
     return (
       <PendingDeposit
@@ -76,6 +86,8 @@ export default function DepositPanel() {
         onCancel={async () => {
           try {
             await cancelDeposit({ depositId: open.id });
+            setStep(0);
+            setRoute(null);
           } catch (e) {
             toast.error(e instanceof Error ? e.message : "Could not cancel");
           }
@@ -84,22 +96,22 @@ export default function DepositPanel() {
     );
   }
 
-  const submit = async () => {
-    const n = Number(amount);
-    if (!Number.isFinite(n) || n < rail.minDeposit) {
-      toast.error(`Minimum deposit is ${rail.minDeposit} ${asset}`);
-      return;
-    }
+  const n = Number(amount) || 0;
+  const amountValid = n >= rail.minDeposit && n <= rail.maxDeposit;
+  const phoneValid = phone.replace(/\D/g, "").length >= 9;
+
+  const confirm = async () => {
     setBusy(true);
     try {
       if (route === "ecocash") {
         const out = await topUpWithEcocash({ amount: n, payerPhone: phone });
-        toast.success(
-          `Approve $${out.fiatAmount.toFixed(2)} on ${out.payerPhone} — ref ${out.referenceNumber}`,
-          { duration: 8000 },
-        );
+        setEcocashRef({
+          reference: out.referenceNumber,
+          fiatAmount: out.fiatAmount,
+          phone: out.payerPhone,
+        });
       } else {
-        await createDeposit({ amount: n, asset });
+        await createDeposit({ amount: n, asset: "USDT" });
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not start that deposit";
@@ -110,122 +122,179 @@ export default function DepositPanel() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
-        <div className="space-y-2">
-          <Label htmlFor="deposit-amount">Amount to deposit</Label>
-          <Input
-            id="deposit-amount"
-            type="number"
-            inputMode="decimal"
-            min={rail.minDeposit}
-            max={rail.maxDeposit}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Asset</Label>
-          <Select value={asset} onValueChange={setAsset}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {rail.assets.map((a) => (
-                <SelectItem key={a} value={a}>
-                  {a}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <Steps steps={STEPS} current={step} />
 
-      <div className="grid grid-cols-2 gap-2">
-        <RouteTab
-          active={route === "send"}
-          onClick={() => setRoute("send")}
-          title="Send crypto"
-          subtitle="You already hold USDT"
-        />
-        <RouteTab
-          active={route === "ecocash"}
-          onClick={() => setRoute("ecocash")}
-          title="Pay with EcoCash"
-          subtitle="No crypto needed"
-        />
-      </div>
-
-      {route === "ecocash" && (
-        <div className="space-y-2">
-          <Label htmlFor="onramp-phone">EcoCash number</Label>
-          <Input
-            id="onramp-phone"
-            placeholder="0771234567"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+      {step === 0 && (
+        <div className="space-y-3">
+          <p className="text-sm text-slate-500">How do you want to add funds?</p>
+          <Choice
+            icon="₮"
+            title="Send crypto"
+            subtitle="You already hold USDT on BNB Chain"
+            onClick={() => {
+              setRoute("send");
+              setStep(1);
+            }}
           />
-          <p className="text-xs text-slate-500">
-            You approve the payment on your phone. The USDT is bought and sent to
-            your deposit for you — nothing to copy, nothing to send.
-          </p>
+          <Choice
+            icon="📱"
+            title="Pay with EcoCash"
+            subtitle="No crypto needed — we buy it for you"
+            onClick={() => {
+              setRoute("ecocash");
+              setStep(1);
+            }}
+          />
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        {[5, 10, 25, 50].map((v) => (
-          <button
-            key={v}
-            onClick={() => setAmount(String(v))}
-            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:border-slate-300 dark:border-gray-700 dark:text-slate-300"
+      {step === 1 && (
+        <div className="space-y-5">
+          <BackLink onClick={() => setStep(0)} />
+
+          <div className="space-y-2">
+            <Label htmlFor="deposit-amount">
+              How much do you want credited?
+            </Label>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                $
+              </span>
+              <Input
+                id="deposit-amount"
+                type="number"
+                inputMode="decimal"
+                min={rail.minDeposit}
+                max={rail.maxDeposit}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="pl-7 text-lg"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {[5, 10, 25, 50].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setAmount(String(v))}
+                  className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:border-slate-400 dark:border-gray-700 dark:text-slate-300"
+                >
+                  ${v}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500">
+              Between ${rail.minDeposit} and ${rail.maxDeposit}.
+            </p>
+          </div>
+
+          {route === "ecocash" && (
+            <div className="space-y-2">
+              <Label htmlFor="onramp-phone">Your EcoCash number</Label>
+              <Input
+                id="onramp-phone"
+                placeholder="0771234567"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+              <p className="text-xs text-slate-500">
+                You approve the payment on this phone.
+              </p>
+            </div>
+          )}
+
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={!amountValid || (route === "ecocash" && !phoneValid)}
+            onClick={() => setStep(2)}
           >
-            ${v}
-          </button>
-        ))}
+            Review
+          </Button>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-5">
+          <BackLink onClick={() => setStep(1)} />
+
+          <ReviewCard>
+            {route === "ecocash" ? (
+              <>
+                <ReviewRow label="Pay from" value={phone} />
+                <ReviewRow
+                  label="You pay on EcoCash"
+                  value={`$${fiatForCrypto(n).toFixed(2)}`}
+                />
+                <ReviewRow
+                  label="Credited to your balance"
+                  value={`$${n.toFixed(2)}`}
+                  emphasis
+                />
+              </>
+            ) : (
+              <>
+                <ReviewRow label="Network" value={rail.chain} />
+                <ReviewRow label="Asset" value="USDT" />
+                <ReviewRow
+                  label="Deposit fee"
+                  value={rail.feePercent === 0 ? "Free" : `${rail.feePercent}%`}
+                />
+                <ReviewRow
+                  label="Credited to your balance"
+                  value={`$${n.toFixed(2)}`}
+                  emphasis
+                />
+              </>
+            )}
+            <ReviewRow
+              label="Available after"
+              value={`${rail.requiredConfirmations} confirmations, ~1–3 min`}
+              muted
+            />
+          </ReviewCard>
+
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={busy}
+            onClick={confirm}
+          >
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {route === "ecocash"
+              ? `Send EcoCash prompt for $${fiatForCrypto(n).toFixed(2)}`
+              : "Get my deposit address"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function EcocashPending(props: {
+  info: { reference: string; fiatAmount: number; phone: string };
+  onDone: () => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-blue-300 bg-blue-50 p-4 dark:border-blue-700/50 dark:bg-blue-900/20">
+        <p className="font-medium text-slate-900 dark:text-slate-100">
+          Check your phone
+        </p>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+          Approve the ${props.info.fiatAmount.toFixed(2)} EcoCash prompt on{" "}
+          {props.info.phone}. Your balance updates by itself once it clears — you
+          can close this page.
+        </p>
       </div>
-
-      <dl className="space-y-1.5 rounded-lg bg-slate-50 p-4 text-sm dark:bg-gray-800/50">
-        <Row label="Network" value={rail.chain} />
-        {route === "ecocash" ? (
-          <>
-            {/*
-              SGX takes 2% off the fiat, so the figure that *delivers* the
-              amount is amount/(1-0.02), not amount*1.02. Both numbers are
-              shown: the one leaving their EcoCash and the one landing in the
-              balance. Quoting only the second is how a player discovers a fee
-              at the moment they can no longer decline it.
-            */}
-            <Row
-              label="You pay on EcoCash"
-              value={`$${(Math.round(((Number(amount) || 0) / 0.98 + 0.005) * 100) / 100).toFixed(2)}`}
-            />
-            <Row
-              label="Credited to your balance"
-              value={`$${(Number(amount) || 0).toFixed(2)}`}
-              highlight
-            />
-          </>
-        ) : (
-          <Row
-            label="Deposit fee"
-            value={rail.feePercent === 0 ? "None" : `${rail.feePercent}%`}
-            highlight={rail.feePercent === 0}
-          />
-        )}
-        <Row
-          label="Credited after"
-          value={`${rail.requiredConfirmations} confirmations (~1–3 min)`}
-        />
-      </dl>
-
-      <Button
-        onClick={submit}
-        disabled={busy || (route === "ecocash" && phone.trim().length < 9)}
-        className="w-full"
-        size="lg"
-      >
-        {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        {route === "ecocash" ? "Pay with EcoCash" : "Get deposit address"}
+      <ReviewCard>
+        <ReviewRow label="Reference" value={props.info.reference} />
+      </ReviewCard>
+      <Button variant="outline" className="w-full" onClick={props.onDone}>
+        Done
       </Button>
     </div>
   );
@@ -247,7 +316,7 @@ function PendingDeposit(props: {
     <div className="space-y-5">
       <div
         className={cn(
-          "rounded-lg border p-4",
+          "rounded-xl border p-4",
           detected
             ? "border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-900/20"
             : underpaid
@@ -255,12 +324,12 @@ function PendingDeposit(props: {
               : "border-blue-300 bg-blue-50 dark:border-blue-700/50 dark:bg-blue-900/20",
         )}
       >
-        <p className="text-sm font-medium">
+        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
           {detected
             ? `Transfer seen — ${d.confirmations}/${d.requiredConfirmations} confirmations`
             : underpaid
               ? `Short by ${(d.amountPayable - d.amountReceived).toFixed(4)} ${d.asset} — send the difference to finish`
-              : `Send exactly ${d.amountPayable} ${d.asset} on ${d.chain}`}
+              : "Waiting for your transfer"}
         </p>
         {detected && (
           <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
@@ -269,18 +338,23 @@ function PendingDeposit(props: {
         )}
       </div>
 
-      <CopyField
-        label={`Exact amount (${d.asset})`}
-        value={String(d.amountPayable)}
-        mono
-        hint="Send this figure exactly — the last decimals identify your deposit."
-      />
-      <CopyField
-        label="Deposit address"
-        value={d.depositAddress}
-        mono
-        href={d.depositAddressUrl ?? undefined}
-      />
+      {!detected && (
+        <>
+          <CopyField
+            label={`Send exactly this much ${d.asset}`}
+            value={String(d.amountPayable)}
+            mono
+            big
+            hint="The last decimals identify your deposit. Send this figure exactly."
+          />
+          <CopyField
+            label={`To this address · ${d.chain}`}
+            value={d.depositAddress}
+            mono
+            href={d.depositAddressUrl ?? undefined}
+          />
+        </>
+      )}
 
       {d.txHash && (
         <CopyField
@@ -291,21 +365,22 @@ function PendingDeposit(props: {
         />
       )}
 
-      <dl className="space-y-1.5 rounded-lg bg-slate-50 p-4 text-sm dark:bg-gray-800/50">
-        <Row label="You asked for" value={`${d.amountRequested} ${d.asset}`} />
-        <Row
+      <ReviewCard>
+        <ReviewRow label="You asked for" value={`$${d.amountRequested}`} />
+        <ReviewRow
           label="Received so far"
           value={`${d.amountReceived} ${d.asset}`}
         />
-        <Row
+        <ReviewRow
           label="Quote expires"
           value={new Date(d.expiresAt).toLocaleTimeString()}
+          muted
         />
-      </dl>
+      </ReviewCard>
 
       <p className="text-xs text-slate-500">
-        A late transfer still counts: money that arrives after the quote expires
-        is matched back to it for seven days.
+        Late money still counts — a transfer arriving after the quote expires is
+        matched back to it for seven days.
       </p>
 
       {d.status === "awaiting_payment" && (
@@ -321,6 +396,7 @@ function CopyField(props: {
   label: string;
   value: string;
   mono?: boolean;
+  big?: boolean;
   hint?: string;
   href?: string;
 }) {
@@ -331,13 +407,15 @@ function CopyField(props: {
       <div className="flex items-stretch gap-2">
         <div
           className={cn(
-            "flex-1 overflow-x-auto rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-gray-700 dark:bg-gray-800",
+            "flex-1 overflow-x-auto rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800",
             props.mono && "font-mono",
+            props.big ? "text-lg font-semibold" : "text-sm",
           )}
         >
           <span className="whitespace-nowrap">{props.value}</span>
         </div>
         <button
+          type="button"
           onClick={() => {
             void navigator.clipboard.writeText(props.value).then(() => {
               setCopied(true);
@@ -370,54 +448,6 @@ function CopyField(props: {
   );
 }
 
-function RouteTab(props: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <button
-      onClick={props.onClick}
-      className={cn(
-        "rounded-lg border p-3 text-left transition-colors",
-        props.active
-          ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
-          : "border-slate-200 text-slate-600 hover:border-slate-300 dark:border-gray-700 dark:text-slate-300",
-      )}
-    >
-      <div className="font-medium">{props.title}</div>
-      <div
-        className={cn("text-xs", props.active ? "opacity-70" : "text-slate-400")}
-      >
-        {props.subtitle}
-      </div>
-    </button>
-  );
-}
-
-export function Row(props: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div className="flex justify-between gap-4">
-      <dt className="text-slate-500">{props.label}</dt>
-      <dd
-        className={cn(
-          "text-right font-medium",
-          props.highlight
-            ? "text-emerald-600 dark:text-emerald-400"
-            : "text-slate-900 dark:text-slate-100",
-        )}
-      >
-        {props.value}
-      </dd>
-    </div>
-  );
-}
-
 export function PanelSpinner() {
   return (
     <div className="flex h-48 items-center justify-center">
@@ -434,7 +464,7 @@ export function Notice(props: {
   return (
     <div
       className={cn(
-        "rounded-lg border p-4",
+        "rounded-xl border p-4",
         props.tone === "warn"
           ? "border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-900/20"
           : "border-slate-200 bg-slate-50 dark:border-gray-700 dark:bg-gray-800/50",
