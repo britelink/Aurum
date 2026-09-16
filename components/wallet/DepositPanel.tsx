@@ -49,6 +49,15 @@ export default function DepositPanel() {
   const [amount, setAmount] = useState("10");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
+  /*
+   * Shown inline on the confirm step, not only as a toast.
+   *
+   * When the EcoCash on-ramp refused, the toast came and went and the screen
+   * did not move -- so it read as a dead button rather than a refusal, which is
+   * the same failure mode the Google sign-in had. A step that cannot proceed
+   * has to say why, where the reader is already looking.
+   */
+  const [failure, setFailure] = useState<string | null>(null);
   const [ecocashRef, setEcocashRef] = useState<{
     reference: string;
     fiatAmount: number;
@@ -104,6 +113,7 @@ export default function DepositPanel() {
 
   const confirm = async () => {
     setBusy(true);
+    setFailure(null);
     try {
       if (route === "ecocash") {
         const out = await topUpWithEcocash({ amount: n, payerPhone: phone });
@@ -256,6 +266,14 @@ export default function DepositPanel() {
               muted
             />
           </ReviewCard>
+
+          {failure && (
+            <div className="rounded-lg border border-rose-300 bg-rose-50 p-3 dark:border-rose-700/50 dark:bg-rose-900/20">
+              <p className="text-sm text-rose-700 dark:text-rose-300">
+                {failure}
+              </p>
+            </div>
+          )}
 
           <Button
             className="w-full"
