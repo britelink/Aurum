@@ -9,7 +9,12 @@ import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import { normalizeE164Zimbabwe, USDT_RATE_KEY } from "./railLib";
+import {
+  FALLBACK_USD_PER_USDT,
+  USDT_RATE_KEY,
+  normalizeE164Zimbabwe,
+  usdToUsdt,
+} from "./railLib";
 
 type ChessaCryptoToEcocashResult = {
   success: true;
@@ -413,11 +418,32 @@ export const runCryptoToEcocashForPayout = internalAction({
        * small quote drift. It defaults to zero, because absorbing a cost you
        * have not measured is how a float disappears quietly.
        */
+      /*
+       * Compare like with like.
+       *
+       * `sendAmount` is USDT; the debit is USD. They are within a quarter of a
+       * percent of each other, which is exactly why comparing them directly
+       * survives testing and then bites: the guard was silently 0.25% tighter
+       * than intended, and would refuse a payout the player had in fact paid
+       * for. Convert first.
+       */
+      const rateRow = (await ctx.runQuery(internal.deposits.getConfig, {
+        key: USDT_RATE_KEY,
+      })) as string | null;
+      let usdPerUsdt = FALLBACK_USD_PER_USDT;
+      try {
+        const parsed = rateRow ? JSON.parse(rateRow) : null;
+        if (parsed?.usdPerUsdt > 0) usdPerUsdt = parsed.usdPerUsdt;
+      } catch {
+        /* fallback stands */
+      }
+
       const debited = p.amountUsd;
+      const debitedUsdt = usdToUsdt(debited, usdPerUsdt);
       const tolerance = Number(
         process.env.AURUM_PAYOUT_SPREAD_TOLERANCE_USD?.trim() || "0",
       );
-      const budget = debited + (Number.isFinite(tolerance) ? tolerance : 0);
+      const budget = debitedUsdt + (Number.isFinite(tolerance) ? tolerance : 0);
 
       if (sendAmount > budget + 1e-9) {
         const shortfall = Math.round((sendAmount - debited) * 100) / 100;
@@ -430,7 +456,8 @@ export const runCryptoToEcocashForPayout = internalAction({
           payoutId,
           error:
             `EcoCash costs more than this withdrawal covers right now — ` +
-            `$${sendAmount.toFixed(2)} is needed to deliver $${deliverUsd.toFixed(2)}. ` +
+            `${sendAmount.toFixed(2)} USDT is needed to deliver $${deliverUsd.toFixed(2)}, ` +
+            `and $${debited.toFixed(2)} was debited. ` +
             `Your balance is unchanged. Withdraw about $${(sendAmount + 0.05).toFixed(2)} to cover it, or take it out as crypto.`,
         });
         return;

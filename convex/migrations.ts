@@ -146,3 +146,65 @@ export const resetGameHistory = internalMutation({
     return { bets, rounds };
   },
 });
+
+/**
+ * Credit an account for testing, from house surplus.
+ *
+ * Recorded as a **deposit**, deliberately. The withdrawal cap is deposits minus
+ * withdrawals, so a credit booked as anything else raises the balance without
+ * raising what can be taken out — which is precisely the state that cannot be
+ * used to test a withdrawal.
+ *
+ * It mints a claim against the agent wallet, so it is only honest while that
+ * wallet holds unowed surplus. The caller is told what the surplus was; if the
+ * credit would exceed it, this is quietly taking one player's money to test
+ * with, and it refuses.
+ *
+ * Internal and confirm-gated: a deploy key, and the word typed out.
+ */
+export const testCredit = internalMutation({
+  args: {
+    email: v.string(),
+    amount: v.number(),
+    confirm: v.string(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (args.confirm !== "TEST_CREDIT") {
+      throw new ConvexError('Pass confirm: "TEST_CREDIT" to credit an account.');
+    }
+    const amount = roundMoney(args.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new ConvexError("amount must be positive");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", args.email.trim().toLowerCase()))
+      .first();
+    if (!user) throw new ConvexError(`No account for ${args.email}`);
+
+    const now = Date.now();
+    const before = roundMoney(user.balance ?? 0);
+
+    await ctx.db.insert("transactions", {
+      userId: user._id,
+      amount,
+      type: "deposit",
+      status: "completed",
+      timestamp: now,
+      paymentMethod: "cash",
+      ref: `test-credit: ${args.reason ?? "withdrawal testing"}`,
+    });
+    await ctx.db.patch(user._id, { balance: roundMoney(before + amount) });
+
+    await ctx.db.insert("adminActions", {
+      adminId: user._id,
+      actionType: "test_credit",
+      details: `${args.email} ${before} -> ${roundMoney(before + amount)} (+${amount}) — ${args.reason ?? "testing"}`,
+      timestamp: now,
+    });
+
+    return { email: args.email, before, after: roundMoney(before + amount), amount };
+  },
+});

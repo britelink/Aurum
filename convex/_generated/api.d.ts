@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as adminDashboard from "../adminDashboard.js";
 import type * as aurum from "../aurum.js";
 import type * as auth from "../auth.js";
 import type * as authStatus from "../authStatus.js";
@@ -48,6 +49,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  adminDashboard: typeof adminDashboard;
   aurum: typeof aurum;
   auth: typeof auth;
   authStatus: typeof authStatus;
