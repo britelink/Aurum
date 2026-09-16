@@ -36,10 +36,18 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
 
 export const config = {
   /*
-   * Static assets are excluded so the middleware does not run — and, more to
-   * the point, does not call `isAuthenticated()` — once per image on every page
-   * load. `/api` is excluded as well: the retired routes answer 410 on their
-   * own and nothing there should depend on a cookie.
+   * Static assets only.
+   *
+   * `/api` was excluded here for one commit, on the reasoning that the retired
+   * routes answer 410 on their own and nothing under `/api` should depend on a
+   * cookie. That is true of every route there except the one that matters:
+   * `convexAuthNextjsMiddleware` *is* the handler for `POST /api/auth`, the
+   * endpoint the browser calls to begin the OAuth handshake. Skipping the
+   * middleware there meant the POST fell through to Next's router, returned an
+   * empty 200, and Google sign-in failed with nothing in the Convex logs —
+   * because the request never reached Convex at all.
+   *
+   * So: exclude assets, and nothing else.
    */
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
