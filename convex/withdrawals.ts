@@ -24,6 +24,26 @@ export const getPayoutForAction = internalQuery({
   },
 });
 
+/**
+ * Payouts Chessa has an order for but has not resolved yet.
+ *
+ * Ordered oldest-first so a stuck row is looked at every tick rather than being
+ * pushed off the end of the page by newer ones.
+ */
+export const listAwaitingSettlement = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("ecocashPayouts")
+      .withIndex("by_user_created")
+      .order("asc")
+      .take(300);
+    return rows
+      .filter((r) => r.status === "sgx_submitted")
+      .slice(0, Math.min(args.limit ?? 25, 50));
+  },
+});
+
 export const markPayoutSgxSuccess = internalMutation({
   args: {
     payoutId: v.id("ecocashPayouts"),

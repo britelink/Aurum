@@ -37,6 +37,22 @@ crons.interval(
   {},
 );
 
+/*
+ * Ask Chessa what happened to payouts it has an order for.
+ *
+ * Polling rather than waiting for a callback: the callback route exists but
+ * needs a shared secret configured on Chessa's side, and that turns our own
+ * status display into a dependency on someone else's deployment. The order id
+ * is already in our row, so we can simply read the answer. Two minutes is well
+ * inside the time an EcoCash settlement takes.
+ */
+crons.interval(
+  "poll ecocash payout status",
+  { minutes: 2 },
+  internal.ecocashStatusPoll.pollEcocashPayouts,
+  {},
+);
+
 crons.interval("game heartbeat", { minutes: 5 }, internal.gameEngine.ensureRound, {});
 
 export default crons;

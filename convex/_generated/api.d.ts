@@ -20,6 +20,7 @@ import type * as cryptoPayoutNode from "../cryptoPayoutNode.js";
 import type * as cryptoWithdrawals from "../cryptoWithdrawals.js";
 import type * as depositWatcherNode from "../depositWatcherNode.js";
 import type * as deposits from "../deposits.js";
+import type * as ecocashStatusPoll from "../ecocashStatusPoll.js";
 import type * as gameEngine from "../gameEngine.js";
 import type * as gameLib from "../gameLib.js";
 import type * as http from "../http.js";
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   cryptoWithdrawals: typeof cryptoWithdrawals;
   depositWatcherNode: typeof depositWatcherNode;
   deposits: typeof deposits;
+  ecocashStatusPoll: typeof ecocashStatusPoll;
   gameEngine: typeof gameEngine;
   gameLib: typeof gameLib;
   http: typeof http;
