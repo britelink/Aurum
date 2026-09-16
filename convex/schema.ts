@@ -207,6 +207,23 @@ export default defineSchema({
     onrampPhone: v.optional(v.string()),
     onrampStatus: v.optional(v.string()), // initiated | failed
     onrampError: v.optional(v.string()),
+    /**
+     * The provider's own response, as JSON, kept verbatim.
+     *
+     * Pesepay sees a stream of EcoCash collections arriving against Chessa's
+     * merchant account with no indication that they belong to Penny Game. When
+     * they ask -- and they will -- the answer has to be a record tying their
+     * reference to our player, our amount and our timestamp. Reconstructing
+     * that afterwards from three systems is the kind of task that gets answered
+     * with "we think so".
+     *
+     * Stored as a string rather than a shaped object on purpose: it is
+     * evidence, and normalising evidence into fields we happen to care about
+     * today is how the field that settles the dispute gets dropped.
+     */
+    onrampRaw: v.optional(v.string()),
+    /** When the prompt was pushed, for matching against the provider's clock. */
+    onrampInitiatedAt: v.optional(v.number()),
     expiresAt: v.number(),
     paidAt: v.optional(v.number()),
     createdAt: v.number(),

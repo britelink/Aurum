@@ -41,6 +41,8 @@ export const markOnrampInitiated = internalMutation({
     orderId: v.string(),
     fiatAmount: v.number(),
     phone: v.string(),
+    /** The provider's full response, JSON-encoded. Kept as reconciliation evidence. */
+    raw: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.depositId);
@@ -52,6 +54,8 @@ export const markOnrampInitiated = internalMutation({
       onrampFiatAmount: args.fiatAmount,
       onrampPhone: args.phone,
       onrampStatus: "initiated",
+      onrampRaw: args.raw?.slice(0, 8000),
+      onrampInitiatedAt: Date.now(),
       updatedAt: Date.now(),
     });
   },
@@ -92,6 +96,8 @@ export const onrampForDeposit = internalQuery({
     return {
       provider: row.onrampProvider ?? null,
       reference: row.onrampReference ?? null,
+      raw: row.onrampRaw ?? null,
+      initiatedAt: row.onrampInitiatedAt ?? null,
       fiatAmount: row.onrampFiatAmount ?? null,
       phone: row.onrampPhone ?? null,
       status: row.onrampStatus ?? null,

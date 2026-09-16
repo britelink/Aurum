@@ -171,6 +171,19 @@ export const topUpWithEcocash = action({
         orderId: String(out.orderId ?? ""),
         fiatAmount,
         phone,
+        // Verbatim, so a later reconciliation with Pesepay is a lookup rather
+        // than an archaeology exercise across three systems.
+        raw: JSON.stringify({
+          response: out,
+          requested: {
+            walletAddress: quote.depositAddress,
+            cryptoAmount: quote.amountPayable,
+            fiatAmount,
+            payerPhone: phone,
+            depositReference: quote.reference,
+          },
+          at: new Date().toISOString(),
+        }),
       });
 
       return {
@@ -278,26 +291,44 @@ export const onrampStatus = internalAction({
       const statusRef = makeFunctionReference<
         "query",
         Record<string, never>,
-        { available: boolean; message: string | null }
+        {
+          available: boolean;
+          message: string | null;
+          pesepay?: boolean;
+          zb?: boolean;
+        }
       >("v0public:onrampStatus");
       const res = await client.query(statusRef, {});
+
+      /*
+       * `available` is not the flag that governs us.
+       *
+       * SGX reports the on-ramp open when *any* provider is carrying traffic,
+       * and today that is ZB with Pesepay switched off. But
+       * `v0public.ecocashToUsdt` asserts Pesepay specifically and throws before
+       * it reaches a payment, so trusting `available` here offers the player a
+       * route that cannot complete and fails them after they have entered an
+       * amount and a phone number.
+       *
+       * So: the provider our call actually needs, when the deployment reports
+       * it. Older deployments do not, and there we fall back to `available`.
+       */
+      const pesepayKnown = typeof res?.pesepay === "boolean";
+      const usable = pesepayKnown ? res.pesepay === true : Boolean(res?.available);
+
       return {
-        available: Boolean(res?.available),
+        available: usable,
         known: true,
-        message: res?.message ?? null,
+        message: usable
+          ? null
+          : pesepayKnown
+            ? "EcoCash top-ups are paused by the payment provider. Send crypto instead."
+            : (res?.message ?? "EcoCash top-ups are unavailable right now."),
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      /*
-       * The status query is newer than some Chessa deployments — the one this
-       * is pointed at answers `ecocashToUsdt` and `cryptoToEcocash` but has no
-       * `onrampStatus`. "I cannot ask" is not "it is down", and reporting it as
-       * down would hide a working on-ramp behind a maintenance notice.
-       *
-       * So a missing function means unknown-but-assume-open: the player is let
-       * through, and if the provider really is paused the on-ramp call itself
-       * says so, which is the authoritative answer anyway.
-       */
+      // A missing status query is "cannot ask", not "down" — older Chessa
+      // deployments answer the on-ramp but predate this endpoint.
       if (msg.includes("Could not find public function")) {
         return { available: true, known: false, message: null };
       }
@@ -307,5 +338,19 @@ export const onrampStatus = internalAction({
         message: `On-ramp unreachable: ${msg}`,
       };
     }
+  },
+});
+
+/** Public form, so the deposit wizard can hide a route that cannot complete. */
+export const ecocashTopUpStatus = action({
+  args: {},
+  handler: async (
+    ctx,
+  ): Promise<{ available: boolean; message: string | null }> => {
+    const res = (await ctx.runAction(internal.buyCrypto.onrampStatus, {})) as {
+      available: boolean;
+      message: string | null;
+    };
+    return { available: res.available, message: res.message };
   },
 });

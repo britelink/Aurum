@@ -16,7 +16,7 @@
  * who rounds that figure is the one case the backend cannot settle alone.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -43,6 +43,30 @@ export default function DepositPanel() {
   const createDeposit = useMutation(api.deposits.createDeposit);
   const cancelDeposit = useMutation(api.deposits.cancelDeposit);
   const topUpWithEcocash = useAction(api.buyCrypto.topUpWithEcocash);
+  const ecocashStatus = useAction(api.buyCrypto.ecocashTopUpStatus);
+
+  /*
+   * Ask once, on mount, whether the EcoCash route can actually complete.
+   *
+   * An action rather than a query, because the answer lives on SGX's
+   * deployment. `null` means we have not heard yet and the option stays
+   * enabled — a slow check should not hide a working route.
+   */
+  const [ecocashOpen, setEcocashOpen] = useState<{
+    available: boolean;
+    message: string | null;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void ecocashStatus({})
+      .then((r) => {
+        if (!cancelled) setEcocashOpen(r);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [ecocashStatus]);
 
   const [step, setStep] = useState(0);
   const [route, setRoute] = useState<Route | null>(null);
@@ -152,12 +176,20 @@ export default function DepositPanel() {
           <Choice
             icon="📱"
             title="Pay with EcoCash"
-            subtitle="No crypto needed — we buy it for you"
+            subtitle={
+              ecocashOpen && !ecocashOpen.available
+                ? "Paused by the payment provider"
+                : "No crypto needed — we buy it for you"
+            }
+            disabled={ecocashOpen ? !ecocashOpen.available : false}
             onClick={() => {
               setRoute("ecocash");
               setStep(1);
             }}
           />
+          {ecocashOpen && !ecocashOpen.available && ecocashOpen.message && (
+            <p className="text-xs text-slate-500">{ecocashOpen.message}</p>
+          )}
         </div>
       )}
 
