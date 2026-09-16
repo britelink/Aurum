@@ -306,10 +306,27 @@ export const runCryptoToEcocashForPayout = internalAction({
         { payoutId },
       );
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const raw = e instanceof Error ? e.message : String(e);
+      /*
+       * What the player is shown is not what the log records.
+       *
+       * The raw text is a Convex request id and a stack line -- "Chessa
+       * off-ramp: [Request ID: dabd1e...] Server Error" -- which tells the
+       * person whose money just came back precisely nothing. Where the provider
+       * says something actionable, say that instead; otherwise say plainly that
+       * it failed and the money is back. The raw message still goes to the
+       * server log, where the person who can act on it is looking.
+       */
+      console.error(`[aurum-rail] payout ${payoutId} off-ramp failed: ${raw}`);
+      const limit = raw.match(/below the minimum limit of ([\d.]+) (\w+)/i);
+      const friendly = limit
+        ? `EcoCash payouts start at ${limit[1]} ${limit[2]} received. Your balance is unchanged — withdraw a little more, or take it out as crypto.`
+        : /insufficient|balance/i.test(raw)
+          ? "The payout could not be funded right now. Your balance is unchanged; try again shortly."
+          : "EcoCash could not complete this payout. Your balance is unchanged.";
       await ctx.runMutation(internal.withdrawals.markPayoutFailed, {
         payoutId,
-        error: `Chessa off-ramp: ${msg}`,
+        error: friendly,
       });
     }
   },

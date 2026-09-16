@@ -121,7 +121,14 @@ export default function WithdrawPanel() {
   }
 
   const overBalance = parsed > balance;
-  const amountOk = quote?.valid === true && !overBalance;
+  /*
+   * Chessa refuses an EcoCash payout under $2 *received*, and the refusal comes
+   * back as a bare 400 after the debit. Checked here so the player is told the
+   * number before they commit, not refunded with a request id afterwards.
+   */
+  const ecocashTooSmall =
+    method === "ecocash" && quote?.valid === true && quote.ecocashOk === false;
+  const amountOk = quote?.valid === true && !overBalance && !ecocashTooSmall;
   const addressOk = /^0x[a-fA-F0-9]{40}$/.test(address.trim());
 
   const check = async () => {
@@ -194,7 +201,11 @@ export default function WithdrawPanel() {
           <Choice
             icon="📱"
             title="EcoCash"
-            subtitle="Zimbabwe mobile money, via Chessa"
+            subtitle={
+              quote?.ecocashMinNet
+                ? `Zimbabwe mobile money — from $${quote.ecocashMinNet.toFixed(2)}`
+                : "Zimbabwe mobile money, via Chessa"
+            }
             onClick={() => {
               setMethod("ecocash");
               setStep(1);
@@ -242,6 +253,14 @@ export default function WithdrawPanel() {
             )}
             {quote?.valid === false && quote.message && !overBalance && (
               <p className="text-xs text-slate-500">{quote.message}</p>
+            )}
+            {ecocashTooSmall && quote?.valid && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                EcoCash pays out from ${quote.ecocashMinNet?.toFixed(2)} received.
+                Withdraw at least ${quote.ecocashMinGross?.toFixed(2)}, or take
+                this out as crypto — that has no minimum beyond $
+                {MIN_WITHDRAW.toFixed(2)}.
+              </p>
             )}
           </div>
 

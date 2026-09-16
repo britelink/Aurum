@@ -91,6 +91,43 @@ export const DEFAULT_WITHDRAW_MIN_FEE_USD = 0.05;
  */
 export const MIN_WITHDRAW_USD = 0.5;
 
+/**
+ * Chessa will not deliver an EcoCash payout below this, in USD **received**.
+ *
+ * Their Zimbabwe route publishes `limits: { min: 2, max: 10000 }`, and it is
+ * enforced on the amount the recipient gets — not the amount the player asked
+ * for. A $2.00 withdrawal with a $0.05 fee sends $1.95, which is under the
+ * floor and comes back as a bare "Server Error" with a request id: no mention
+ * of a limit, nothing a player or an operator could act on. This is the same
+ * number, checked on our side, before anything is debited.
+ *
+ * Env-overridable because it is Chessa's number to change, not ours.
+ */
+export const DEFAULT_ECOCASH_MIN_NET_USD = 2;
+
+export function ecocashMinNetUsd(): number {
+  const raw = process.env.AURUM_ECOCASH_MIN_NET_USD?.trim();
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_ECOCASH_MIN_NET_USD;
+}
+
+/**
+ * The smallest gross withdrawal whose net clears Chessa's floor.
+ *
+ * Solved rather than hard-coded, so it stays correct when the fee rate, the fee
+ * floor or Chessa's minimum move. Walks up in cents from the floor itself —
+ * the answer is always within a few cents, and this cannot drift out of step
+ * with `computeWithdrawFee` the way a second formula would.
+ */
+export function minEcocashGrossUsd(): number {
+  const target = ecocashMinNetUsd();
+  for (let cents = Math.round(target * 100); cents <= Math.round(target * 100) + 100; cents++) {
+    const gross = cents / 100;
+    if (computeWithdrawFee(gross).net >= target - 1e-9) return gross;
+  }
+  return roundMoney(target * 1.1);
+}
+
 export const EXPLORER_BASE = "https://bscscan.com";
 
 export function explorerTxUrl(txHash?: string | null): string | null {

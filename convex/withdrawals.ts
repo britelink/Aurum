@@ -11,6 +11,8 @@ import { Id } from "./_generated/dataModel";
 import {
   MIN_WITHDRAW_USD,
   computeWithdrawFee,
+  ecocashMinNetUsd,
+  minEcocashGrossUsd,
   normalizeE164Zimbabwe,
   roundMoney,
 } from "./railLib";
@@ -263,6 +265,18 @@ export async function queueEcocashPayoutFor(
    * the two numbers to give back.
    */
   const { fee, net } = computeWithdrawFee(amount);
+
+  /*
+   * Chessa's floor is on what the recipient *receives*, so it has to be checked
+   * against `net`, not against what the player typed. Checked here, before the
+   * debit, because failing after it means a refund for a limit we already knew.
+   */
+  if (net < ecocashMinNetUsd()) {
+    throw new Error(
+      `EcoCash payouts start at $${ecocashMinNetUsd().toFixed(2)} received. ` +
+        `Withdraw at least $${minEcocashGrossUsd().toFixed(2)} to clear it, or take this out as crypto.`,
+    );
+  }
 
   if (args.dryRun) {
     return {

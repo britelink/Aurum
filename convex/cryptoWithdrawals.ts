@@ -24,6 +24,8 @@ import {
   INBOUND_CHAIN,
   MIN_WITHDRAW_USD,
   computeWithdrawFee,
+  ecocashMinNetUsd,
+  minEcocashGrossUsd,
   explorerAddressUrl,
   explorerTxUrl,
   isEvmAddress,
@@ -316,6 +318,19 @@ export const quoteWithdrawal = query({
       };
     }
     const { fee, net } = computeWithdrawFee(gross);
-    return { valid: true as const, gross, fee, net };
+    return {
+      valid: true as const,
+      gross,
+      fee,
+      net,
+      /*
+       * Surfaced so the withdraw form can stop an EcoCash cash-out that cannot
+       * clear Chessa's floor, instead of letting it fail at their end and come
+       * back as a refund plus an unreadable error.
+       */
+      ecocashMinNet: ecocashMinNetUsd(),
+      ecocashMinGross: minEcocashGrossUsd(),
+      ecocashOk: net >= ecocashMinNetUsd(),
+    };
   },
 });
