@@ -6,6 +6,8 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { agentPrivateKey, isNonceConflict } from "./railLib";
+import { AGENT_WALLET_LOCK } from "./sendLock";
 
 const ERC20_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)",
@@ -29,12 +31,21 @@ export const sendUsdtToChessaPayment = internalAction({
       return;
     }
 
-    const privateKey = process.env.PENNY_TREASURY_BEP20_PRIVATE_KEY?.trim();
+    /*
+     * The agent wallet, under whichever name it is configured.
+     *
+     * This read only `PENNY_TREASURY_BEP20_PRIVATE_KEY`, which is not set on
+     * production — so every EcoCash payout that Chessa quoted a BSC address for
+     * died here with "set PENNY_TREASURY_BEP20_PRIVATE_KEY", a message about a
+     * variable nobody uses any more. `agentPrivateKey()` is the one resolver
+     * the rest of the rail already goes through.
+     */
+    const privateKey = agentPrivateKey();
     if (!privateKey) {
       await ctx.runMutation(internal.withdrawals.markPayoutFailed, {
         payoutId,
         error:
-          "Treasury BEP20: set PENNY_TREASURY_BEP20_PRIVATE_KEY on Penny Convex (signing key for BSC USDT payouts)",
+          "Agent wallet is not configured: set AURUM_AGENT_PRIVATE_KEY on Convex.",
       });
       return;
     }
@@ -50,12 +61,14 @@ export const sendUsdtToChessaPayment = internalAction({
 
     const provider = new ethers.JsonRpcProvider(bscRpc);
     const wallet = new ethers.Wallet(privateKey, provider);
-    const expectedFrom = process.env.PENNY_TREASURY_BEP20_ADDRESS?.trim();
+    const expectedFrom =
+      process.env.AURUM_AGENT_WALLET_ADDRESS?.trim() ||
+      process.env.PENNY_TREASURY_BEP20_ADDRESS?.trim();
     if (expectedFrom && wallet.address.toLowerCase() !== expectedFrom.toLowerCase()) {
       await ctx.runMutation(internal.withdrawals.markPayoutFailed, {
         payoutId,
         error:
-          "Treasury BEP20: private key does not match PENNY_TREASURY_BEP20_ADDRESS",
+          "Treasury BEP20: private key does not match the configured agent wallet address",
       });
       return;
     }

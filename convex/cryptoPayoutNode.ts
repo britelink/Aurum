@@ -23,9 +23,11 @@ import type { Doc } from "./_generated/dataModel";
 import {
   agentPrivateKey,
   bscRpcUrls,
+  isNonceConflict,
   tokenAddresses,
   type RailAsset,
 } from "./railLib";
+import { AGENT_WALLET_LOCK } from "./sendLock";
 
 const ERC20_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)",
@@ -70,6 +72,30 @@ export const sendCryptoPayout = internalAction({
     )) as { claimed: boolean; reason?: string };
     if (!claim.claimed) return { skipped: true, reason: claim.reason };
 
+    /*
+     * One sender at a time from this wallet.
+     *
+     * `claimForSending` stops the *same* payout going twice; it says nothing
+     * about two different payouts broadcasting together, which is the case that
+     * collides on the nonce. If the lease is held, put this payout back in
+     * `queued` and try shortly — losing the lease is a wait, not a failure, and
+     * must not refund a player whose money never moved.
+     */
+    const lease = (await ctx.runMutation(internal.sendLock.acquire, {
+      key: AGENT_WALLET_LOCK,
+    })) as { acquired: boolean; token?: string; retryInMs?: number };
+    if (!lease.acquired) {
+      await ctx.runMutation(internal.cryptoWithdrawals.returnToQueue, {
+        payoutId,
+      });
+      await ctx.scheduler.runAfter(
+        Math.min(lease.retryInMs ?? 5_000, 30_000),
+        internal.cryptoPayoutNode.sendCryptoPayout,
+        { payoutId },
+      );
+      return { skipped: true, reason: "wallet busy" };
+    }
+
     const { ethers } = await import("ethers");
 
     let txHash: string | null = null;
@@ -103,8 +129,35 @@ export const sendCryptoPayout = internalAction({
         );
       }
 
-      const tx = await contract.transfer(row.toAddress, amount);
-      txHash = tx.hash as string;
+      /*
+       * Send with an explicit nonce, and retry if the chain says it was taken.
+       *
+       * SGX signs from this same wallet on its own schedule, so between reading
+       * the pending nonce and broadcasting, it may have used it. Every error
+       * `isNonceConflict` matches is a transaction the node **refused** — it
+       * never entered the mempool — which is what makes retrying safe here.
+       * Anything else falls straight through to the catch and is never retried,
+       * because a transaction that did reach the mempool must not be sent twice.
+       */
+      let lastNonceError: unknown = null;
+      for (let attempt = 0; attempt < 3 && !txHash; attempt++) {
+        const nonce = await provider.getTransactionCount(
+          wallet.address,
+          "pending",
+        );
+        try {
+          const tx = await contract.transfer(row.toAddress, amount, { nonce });
+          txHash = tx.hash as string;
+        } catch (err) {
+          if (!isNonceConflict(err)) throw err;
+          lastNonceError = err;
+          console.warn(
+            `[aurum-rail] payout ${payoutId}: nonce ${nonce} taken (attempt ${attempt + 1}), refetching`,
+          );
+          await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+        }
+      }
+      if (!txHash) throw lastNonceError ?? new Error("Could not claim a nonce");
 
       await ctx.runMutation(internal.cryptoWithdrawals.markPayoutSent, {
         payoutId,
@@ -131,6 +184,13 @@ export const sendCryptoPayout = internalAction({
       }
       await fail(`Crypto payout failed: ${msg}`);
       return { failed: true, error: msg };
+    } finally {
+      if (lease.token) {
+        await ctx.runMutation(internal.sendLock.release, {
+          key: AGENT_WALLET_LOCK,
+          token: lease.token,
+        });
+      }
     }
   },
 });

@@ -202,6 +202,22 @@ export const claimForSending = internalMutation({
   },
 });
 
+/**
+ * Put a claimed payout back so another run can take it.
+ *
+ * Used when the wallet lease is held by another sender. Deliberately not a
+ * failure: nothing was sent, the player's money has not moved, and refunding
+ * here would turn a two-second wait into a cancelled withdrawal.
+ */
+export const returnToQueue = internalMutation({
+  args: { payoutId: v.id("cryptoPayouts") },
+  handler: async (ctx, { payoutId }) => {
+    const row = await ctx.db.get(payoutId);
+    if (!row || row.status !== "sending") return;
+    await ctx.db.patch(payoutId, { status: "queued", updatedAt: Date.now() });
+  },
+});
+
 export const markPayoutSent = internalMutation({
   args: { payoutId: v.id("cryptoPayouts"), txHash: v.string() },
   handler: async (ctx, { payoutId, txHash }) => {

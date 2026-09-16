@@ -302,3 +302,27 @@ export function bscRpcUrls(isLive: boolean): string[] {
       ];
   return list.length ? [...list, ...fallbacks] : fallbacks;
 }
+
+/**
+ * Does this chain error mean "that nonce was taken" rather than "it failed"?
+ *
+ * The agent wallet is shared with SGX, which signs from it on its own schedule.
+ * We cannot lock against a process we do not run, so the answer to a collision
+ * is to notice it and try again with a fresh nonce.
+ *
+ * Every string here describes a transaction the node **refused**, which is what
+ * makes retrying safe: nothing was broadcast, so nothing can be sent twice. A
+ * transaction that reached the mempool fails with something else entirely, and
+ * that must never come through here.
+ */
+export function isNonceConflict(e: unknown): boolean {
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return (
+    msg.includes("nonce too low") ||
+    msg.includes("nonce has already been used") ||
+    msg.includes("replacement transaction underpriced") ||
+    msg.includes("already known") ||
+    msg.includes("known transaction") ||
+    msg.includes("invalid nonce")
+  );
+}

@@ -28,6 +28,7 @@ import type * as migrations from "../migrations.js";
 import type * as onChainBalances from "../onChainBalances.js";
 import type * as railLib from "../railLib.js";
 import type * as railsSandbox from "../railsSandbox.js";
+import type * as sendLock from "../sendLock.js";
 import type * as sgxCallbackHttp from "../sgxCallbackHttp.js";
 import type * as treasuryBep20 from "../treasuryBep20.js";
 import type * as treasuryPayout from "../treasuryPayout.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   onChainBalances: typeof onChainBalances;
   railLib: typeof railLib;
   railsSandbox: typeof railsSandbox;
+  sendLock: typeof sendLock;
   sgxCallbackHttp: typeof sgxCallbackHttp;
   treasuryBep20: typeof treasuryBep20;
   treasuryPayout: typeof treasuryPayout;
