@@ -178,6 +178,63 @@ export const validateEcocashRecipient = action({
   },
 });
 
+export const ECOCASH_LIMITS_KEY = "chessaEcocashLimits";
+
+/**
+ * Read Chessa's live Zimbabwe limits and cache them.
+ *
+ * The floor was a constant here, and a constant is a copy of somebody else's
+ * number that starts going stale the moment it is written. Chessa publishes it
+ * in their config (`limits: { min, max }` on the ZW route) and enforces it on
+ * the amount the recipient receives — so the honest thing is to read it and
+ * follow it, and keep the constant only as the answer when they cannot be
+ * reached.
+ *
+ * Cached rather than fetched per quote: the withdraw form prices on every
+ * keystroke, and a quote is a query, which cannot make a network call at all.
+ */
+export const refreshEcocashLimits = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ min: number; max: number } | null> => {
+    try {
+      const client = new ConvexHttpClient(getChessaConvexUrl());
+      const configRef = makeFunctionReference<
+        "action",
+        Record<string, never>,
+        { payouts?: Array<Record<string, unknown>> }
+      >("chessa:getConfig");
+      const cfg = await client.action(configRef, {});
+
+      const routes = Array.isArray(cfg?.payouts) ? cfg.payouts : [];
+      const zw = routes.find((r) => {
+        const country = r?.country as { code?: string } | undefined;
+        return String(country?.code ?? "").toUpperCase() === "ZW";
+      });
+      const limits = zw?.limits as { min?: number; max?: number } | undefined;
+      const min = Number(limits?.min);
+      const max = Number(limits?.max);
+      if (!Number.isFinite(min) || min <= 0) return null;
+
+      await ctx.runMutation(internal.deposits.setConfig, {
+        key: ECOCASH_LIMITS_KEY,
+        value: JSON.stringify({
+          min,
+          max: Number.isFinite(max) && max > 0 ? max : 10000,
+          at: Date.now(),
+        }),
+      });
+      return { min, max };
+    } catch (e) {
+      // A stale cached limit beats no limit; leave whatever is there.
+      console.warn(
+        "[aurum-rail] could not refresh Chessa EcoCash limits:",
+        e instanceof Error ? e.message : e,
+      );
+      return null;
+    }
+  },
+});
+
 /** Create Chessa remit order + payment address, then auto-fund from Penny treasury. */
 export const runCryptoToEcocashForPayout = internalAction({
   args: { payoutId: v.id("ecocashPayouts") },
@@ -281,6 +338,49 @@ export const runCryptoToEcocashForPayout = internalAction({
             `network=${out.network} address=${paymentAddress}. Check PENNY_WITHDRAW_CHAIN ` +
             "is reaching Chessa, or enable a Tron float.",
         );
+        return;
+      }
+
+      /*
+       * Never fund an order that costs more than the player paid for it.
+       *
+       * Chessa charges its own service fee on top of the rate, and it is
+       * charged in the asset we send: a $2.00 EcoCash payout has been quoted at
+       * **3.01 USDT** on this account. The player's balance was debited $2.05.
+       * Funding that order would move 3.01 USDT out of the agent wallet against
+       * a $2.05 claim — and the agent wallet is one pool holding every player's
+       * deposits, so the extra ~1 USDT is somebody else's money. Do it a few
+       * times and the pool no longer covers what it owes.
+       *
+       * So the order is checked against the debit before a token moves. Over
+       * budget means nothing is sent, the payout fails, and the player is
+       * refunded in full — they are told the real cost and can decide, which is
+       * the only honest place to put that decision.
+       *
+       * `AURUM_PAYOUT_SPREAD_TOLERANCE_USD` lets the house knowingly absorb a
+       * small quote drift. It defaults to zero, because absorbing a cost you
+       * have not measured is how a float disappears quietly.
+       */
+      const debited = p.amountUsd;
+      const tolerance = Number(
+        process.env.AURUM_PAYOUT_SPREAD_TOLERANCE_USD?.trim() || "0",
+      );
+      const budget = debited + (Number.isFinite(tolerance) ? tolerance : 0);
+
+      if (sendAmount > budget + 1e-9) {
+        const shortfall = Math.round((sendAmount - debited) * 100) / 100;
+        console.error(
+          `[aurum-rail] payout ${payoutId}: Chessa wants ${sendAmount} USDT to deliver ` +
+            `$${deliverUsd}, but only $${debited} was debited. Refusing to fund a ` +
+            `${shortfall} USDT shortfall from the shared float.`,
+        );
+        await ctx.runMutation(internal.withdrawals.markPayoutFailed, {
+          payoutId,
+          error:
+            `EcoCash costs more than this withdrawal covers right now — ` +
+            `$${sendAmount.toFixed(2)} is needed to deliver $${deliverUsd.toFixed(2)}. ` +
+            `Your balance is unchanged. Withdraw about $${(sendAmount + 0.05).toFixed(2)} to cover it, or take it out as crypto.`,
+        });
         return;
       }
 

@@ -20,12 +20,12 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
+import { readEcocashMinNet, grossForNet } from "./withdrawals";
+import { withdrawableFor, lockedExplanation } from "./withdrawable";
 import {
   INBOUND_CHAIN,
   MIN_WITHDRAW_USD,
   computeWithdrawFee,
-  ecocashMinNetUsd,
-  minEcocashGrossUsd,
   explorerAddressUrl,
   explorerTxUrl,
   isEvmAddress,
@@ -97,6 +97,16 @@ export async function queueCryptoPayoutFor(
   const user = await ctx.db.get(userId);
   if (!user) throw new ConvexError("User not found");
   if ((user.balance ?? 0) < gross) throw new ConvexError("Insufficient funds");
+
+  /*
+   * Only deposits are withdrawable while the payout float is uncapitalised.
+   * Checked here rather than in the UI alone, because the UI is not the thing
+   * that protects the pool.
+   */
+  const allowance = await withdrawableFor(ctx, userId);
+  if (gross > allowance.withdrawable + 1e-9) {
+    throw new ConvexError(lockedExplanation(allowance));
+  }
 
   const { fee, net } = computeWithdrawFee(gross);
 
@@ -303,8 +313,17 @@ export const myCryptoPayouts = query({
  */
 export const quoteWithdrawal = query({
   args: { amount: v.number() },
-  handler: async (_ctx, { amount }) => {
+  handler: async (ctx, { amount }) => {
+    // Chessa's live floor when we have it cached, our constant otherwise.
+    const minNet = await readEcocashMinNet(ctx);
     const gross = roundMoney(amount);
+    const identity = await ctx.auth.getUserIdentity();
+    const allowance = identity
+      ? await withdrawableFor(
+          ctx,
+          identity.subject.split("|")[0] as Id<"users">,
+        )
+      : null;
     if (!Number.isFinite(gross) || gross <= 0) {
       return { valid: false as const, gross: 0, fee: 0, net: 0 };
     }
@@ -328,9 +347,12 @@ export const quoteWithdrawal = query({
        * clear Chessa's floor, instead of letting it fail at their end and come
        * back as a refund plus an unreadable error.
        */
-      ecocashMinNet: ecocashMinNetUsd(),
-      ecocashMinGross: minEcocashGrossUsd(),
-      ecocashOk: net >= ecocashMinNetUsd(),
+      ecocashMinNet: minNet,
+      ecocashMinGross: grossForNet(minNet),
+      ecocashOk: net >= minNet,
+      withdrawable: allowance?.withdrawable ?? null,
+      lockedWinnings: allowance?.locked ?? null,
+      overAllowance: allowance ? gross > allowance.withdrawable + 1e-9 : false,
     };
   },
 });

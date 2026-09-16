@@ -75,10 +75,27 @@ export default function WalletPage() {
           <div className="font-mono text-4xl font-semibold tabular-nums text-slate-900 dark:text-white">
             ${(me?.balance ?? 0).toFixed(2)}
           </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Held for you on BNB Smart Chain. Deposits are free; withdrawals carry
-            a small fee.
-          </p>
+          {(me?.lockedWinnings ?? 0) > 0 ? (
+            <div className="mt-2 space-y-1 text-xs">
+              <div className="flex justify-between text-slate-500">
+                <span>Withdrawable (your deposits)</span>
+                <span className="font-mono">
+                  ${(me?.withdrawable ?? 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-amber-700 dark:text-amber-400">
+                <span>Winnings — playable, not cashable yet</span>
+                <span className="font-mono">
+                  ${(me?.lockedWinnings ?? 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-slate-500">
+              Held for you on BNB Smart Chain. Deposits are free; withdrawals
+              carry a small fee.
+            </p>
+          )}
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">

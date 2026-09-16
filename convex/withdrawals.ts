@@ -5,6 +5,7 @@ import {
   mutation,
   query,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
@@ -16,8 +17,47 @@ import {
   normalizeE164Zimbabwe,
   roundMoney,
 } from "./railLib";
+import { withdrawableFor, lockedExplanation } from "./withdrawable";
 
 const MIN_USD = MIN_WITHDRAW_USD;
+
+/**
+ * Chessa's live floor if we have it, our constant if we do not.
+ *
+ * Read from the cache `chessaBridge.refreshEcocashLimits` keeps current, so a
+ * change on their side reaches the withdraw form without a deploy.
+ */
+export async function readEcocashMinNet(
+  ctx: { db: MutationCtx["db"] | QueryCtx["db"] },
+): Promise<number> {
+  const row = await ctx.db
+    .query("railConfig")
+    .withIndex("by_key", (q) => q.eq("key", "chessaEcocashLimits"))
+    .first();
+  if (row?.value) {
+    try {
+      const parsed = JSON.parse(row.value) as { min?: number };
+      const min = Number(parsed.min);
+      if (Number.isFinite(min) && min > 0) return min;
+    } catch {
+      /* fall through to the constant */
+    }
+  }
+  return ecocashMinNetUsd();
+}
+
+/** Smallest gross that clears whichever floor is in force. */
+export function grossForNet(target: number): number {
+  for (
+    let cents = Math.round(target * 100);
+    cents <= Math.round(target * 100) + 200;
+    cents++
+  ) {
+    const gross = cents / 100;
+    if (computeWithdrawFee(gross).net >= target - 1e-9) return gross;
+  }
+  return roundMoney(target * 1.1);
+}
 
 export const getPayoutForAction = internalQuery({
   args: { payoutId: v.id("ecocashPayouts") },
@@ -252,6 +292,12 @@ export async function queueEcocashPayoutFor(
     throw new Error("Insufficient funds");
   }
 
+  // Deposits only, until the float is capitalised. See convex/withdrawable.ts.
+  const allowance = await withdrawableFor(ctx, userId);
+  if (amount > allowance.withdrawable + 1e-9) {
+    throw new Error(lockedExplanation(allowance));
+  }
+
   const phone = normalizeE164Zimbabwe(args.ecocashPhone);
   if (phone.length < 12) {
     throw new Error("Check EcoCash / phone number format");
@@ -271,10 +317,11 @@ export async function queueEcocashPayoutFor(
    * against `net`, not against what the player typed. Checked here, before the
    * debit, because failing after it means a refund for a limit we already knew.
    */
-  if (net < ecocashMinNetUsd()) {
+  const minNet = await readEcocashMinNet(ctx);
+  if (net < minNet) {
     throw new Error(
-      `EcoCash payouts start at $${ecocashMinNetUsd().toFixed(2)} received. ` +
-        `Withdraw at least $${minEcocashGrossUsd().toFixed(2)} to clear it, or take this out as crypto.`,
+      `EcoCash payouts start at $${minNet.toFixed(2)} received. ` +
+        `Withdraw at least $${grossForNet(minNet).toFixed(2)} to clear it, or take this out as crypto.`,
     );
   }
 

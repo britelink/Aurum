@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query, mutation, action, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import { withdrawableFor } from "./withdrawable";
 import {
   formatSgxPartnerApiError,
   getSgxV0BaseUrl,
@@ -244,11 +245,16 @@ export const myBalance = query({
     const userId = identity.subject.split("|")[0] as Id<"users">;
     const user = await ctx.db.get(userId);
     if (!user) return null;
+    const allowance = await withdrawableFor(ctx, userId);
     return {
       userId,
       name: user.name ?? null,
       email: user.email ?? null,
       balance: user.balance ?? 0,
+      // Split out so the wallet can show what is cashable and what is winnings.
+      withdrawable: allowance.withdrawable,
+      lockedWinnings: allowance.locked,
+      deposited: allowance.deposited,
       payoutAddress: user.payoutAddress ?? null,
       payoutPhone: user.payoutPhone ?? null,
     };

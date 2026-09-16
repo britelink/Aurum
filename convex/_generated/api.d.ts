@@ -33,9 +33,11 @@ import type * as railsSandbox from "../railsSandbox.js";
 import type * as reserveReleaseNode from "../reserveReleaseNode.js";
 import type * as sendLock from "../sendLock.js";
 import type * as sgxCallbackHttp from "../sgxCallbackHttp.js";
+import type * as treasury from "../treasury.js";
 import type * as treasuryBep20 from "../treasuryBep20.js";
 import type * as treasuryPayout from "../treasuryPayout.js";
 import type * as treasuryTron from "../treasuryTron.js";
+import type * as withdrawable from "../withdrawable.js";
 import type * as withdrawals from "../withdrawals.js";
 
 import type {
@@ -70,9 +72,11 @@ declare const fullApi: ApiFromModules<{
   reserveReleaseNode: typeof reserveReleaseNode;
   sendLock: typeof sendLock;
   sgxCallbackHttp: typeof sgxCallbackHttp;
+  treasury: typeof treasury;
   treasuryBep20: typeof treasuryBep20;
   treasuryPayout: typeof treasuryPayout;
   treasuryTron: typeof treasuryTron;
+  withdrawable: typeof withdrawable;
   withdrawals: typeof withdrawals;
 }>;
 

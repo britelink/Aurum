@@ -53,6 +53,15 @@ crons.interval(
   {},
 );
 
+// Chessa's payout floor is theirs to change; follow it rather than shipping a
+// copy that goes stale. Six hours is far more often than a limit moves.
+crons.interval(
+  "refresh chessa ecocash limits",
+  { hours: 6 },
+  internal.chessaBridge.refreshEcocashLimits,
+  {},
+);
+
 crons.interval("game heartbeat", { minutes: 5 }, internal.gameEngine.ensureRound, {});
 
 export default crons;

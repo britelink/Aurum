@@ -66,6 +66,14 @@ export default function WithdrawPanel() {
     amount: Number.isFinite(parsed) && parsed > 0 ? parsed : 0,
   });
   const balance = me?.balance ?? 0;
+  /*
+   * Only deposits are cashable while the payout float is uncapitalised.
+   * Winnings are real and playable; they are just not yet withdrawable, and the
+   * screen says which is which rather than letting someone find out at the
+   * final button.
+   */
+  const withdrawable = me?.withdrawable ?? 0;
+  const lockedWinnings = me?.lockedWinnings ?? 0;
 
   useEffect(() => {
     if (me?.payoutAddress && !address) setAddress(me.payoutAddress);
@@ -92,7 +100,7 @@ export default function WithdrawPanel() {
    * to find out what happened to it, and hiding that behind an empty state is
    * exactly the wrong moment to go quiet.
    */
-  if (balance < MIN_WITHDRAW) {
+  if (withdrawable < MIN_WITHDRAW) {
     return (
       <div className="space-y-5">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center dark:border-gray-700 dark:bg-gray-800/50">
@@ -100,9 +108,11 @@ export default function WithdrawPanel() {
             Nothing to withdraw yet
           </p>
           <p className="mt-1 text-sm text-slate-500">
-            {balance > 0
-              ? `You have $${balance.toFixed(2)}. The minimum withdrawal is $${MIN_WITHDRAW.toFixed(2)}.`
-              : "Add funds and win a few rounds, then come back."}
+            {lockedWinnings > 0
+              ? `Your $${lockedWinnings.toFixed(2)} is winnings. Withdrawals are limited to what you have deposited while the payout float is being capitalised — in-game winnings are not cashable yet.`
+              : balance > 0
+                ? `You have $${balance.toFixed(2)}. The minimum withdrawal is $${MIN_WITHDRAW.toFixed(2)}.`
+                : "Add funds and win a few rounds, then come back."}
           </p>
         </div>
         <PayoutHistory
@@ -120,7 +130,7 @@ export default function WithdrawPanel() {
     );
   }
 
-  const overBalance = parsed > balance;
+  const overBalance = parsed > withdrawable;
   /*
    * Chessa refuses an EcoCash payout under $2 *received*, and the refusal comes
    * back as a bare 400 after the debit. Checked here so the player is told the
@@ -211,9 +221,14 @@ export default function WithdrawPanel() {
               setStep(1);
             }}
           />
-          <p className="pt-1 text-xs text-slate-500">
-            Balance ${balance.toFixed(2)}
-          </p>
+          <div className="pt-1 text-xs text-slate-500">
+            <div>Withdrawable ${withdrawable.toFixed(2)}</div>
+            {lockedWinnings > 0 && (
+              <div className="text-amber-700 dark:text-amber-400">
+                + ${lockedWinnings.toFixed(2)} winnings — not cashable yet
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -226,10 +241,10 @@ export default function WithdrawPanel() {
               <Label htmlFor="withdraw-amount">How much?</Label>
               <button
                 type="button"
-                onClick={() => setAmount(balance.toFixed(2))}
+                onClick={() => setAmount(withdrawable.toFixed(2))}
                 className="text-xs text-slate-500 underline-offset-2 hover:underline"
               >
-                All ${balance.toFixed(2)}
+                All ${withdrawable.toFixed(2)}
               </button>
             </div>
             <div className="relative">
@@ -248,7 +263,9 @@ export default function WithdrawPanel() {
             </div>
             {overBalance && (
               <p className="text-xs text-rose-600">
-                That is more than your balance.
+                {lockedWinnings > 0
+                  ? `You can withdraw up to $${withdrawable.toFixed(2)} — your deposits. The other $${lockedWinnings.toFixed(2)} is winnings, not cashable yet.`
+                  : "That is more than your balance."}
               </p>
             )}
             {quote?.valid === false && quote.message && !overBalance && (
@@ -369,8 +386,8 @@ export default function WithdrawPanel() {
               emphasis
             />
             <ReviewRow
-              label="Balance after"
-              value={`$${(balance - quote.gross).toFixed(2)}`}
+              label="Withdrawable after"
+              value={`$${(withdrawable - quote.gross).toFixed(2)}`}
               muted
             />
           </ReviewCard>
