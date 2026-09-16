@@ -34,6 +34,21 @@ const require = createRequire(import.meta.url);
 const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
 const PROD = argv.includes("--prod");
+/**
+ * Replace values that are already set on the deployment.
+ *
+ * Off by default, and that default is the whole safety property of this script.
+ * Pointed at a deployment that has been running, it would otherwise mint a
+ * fresh `JWT_PRIVATE_KEY`/`JWKS` pair — because those live only on Convex, never
+ * in a local env file, so they read as "missing" from here — and silently
+ * invalidate every existing session. It would also stamp `SITE_URL` back to
+ * localhost and break the OAuth redirect on a deployment where Google sign-in
+ * already worked.
+ *
+ * Seeding is for what is absent. Changing what is present is a decision, and it
+ * needs to be typed.
+ */
+const OVERWRITE = argv.includes("--overwrite");
 const sgxIdx = argv.indexOf("--sgx");
 const SGX_ENV_PATH = sgxIdx >= 0 ? argv[sgxIdx + 1] : null;
 
@@ -305,6 +320,26 @@ function shellQuote(arg) {
   return `"${String(arg).replace(/"/g, '\\"')}"`;
 }
 
+/**
+ * Names already set on the target deployment.
+ *
+ * Read once, before anything is written. `convex env list` prints `NAME=value`
+ * per line; only the names are kept — the values are the deployment's business
+ * and there is no reason for them to pass through here.
+ */
+function existingEnvNames() {
+  const args = ["convex", "env", "list"];
+  if (PROD) args.push("--prod");
+  const res = spawnSync("npx", args, { encoding: "utf8", shell: true });
+  if (res.status !== 0) return null; // unknown — caller decides what that means
+  const names = new Set();
+  for (const line of String(res.stdout ?? "").split(/\r?\n/)) {
+    const eq = line.indexOf("=");
+    if (eq > 0) names.add(line.slice(0, eq).trim());
+  }
+  return names;
+}
+
 function convexEnvSet(name, value) {
   // `--` ends option parsing, so a value that begins with a dash is a value.
   const args = ["convex", "env", "set"];
@@ -320,19 +355,42 @@ async function main() {
     resolved.push({ ...entry, value: entry.from() });
   }
 
-  // Auth keys are a pair or nothing. If either half is missing, mint both —
-  // keeping one old half would sign with a key the JWKS does not describe.
+  // What the deployment already has. Anything here is left alone unless the
+  // caller typed --overwrite.
+  const present = existingEnvNames();
+  const alreadySet = (name) => present !== null && present.has(name);
+  for (const r of resolved) {
+    if (alreadySet(r.name) && !OVERWRITE) {
+      r.skip = true;
+      r.note = "already set on deployment — kept";
+    }
+  }
+
+  /*
+   * Auth keys are a pair or nothing: keeping one old half would sign with a key
+   * the JWKS does not describe.
+   *
+   * But minting them is only correct when the deployment has neither. They live
+   * on Convex and never in a local env file, so from here they always look
+   * missing — and generating over a working pair logs every existing user out
+   * and, on a deployment whose Google client is already registered, breaks
+   * sign-in outright. So: only generate when the deployment itself is bare.
+   */
   const jwtRow = resolved.find((r) => r.name === "JWT_PRIVATE_KEY");
   const jwksRow = resolved.find((r) => r.name === "JWKS");
-  if (!jwtRow.value || !jwksRow.value) {
+  const authKeysOnDeployment = alreadySet("JWT_PRIVATE_KEY") && alreadySet("JWKS");
+  if (!authKeysOnDeployment && (!jwtRow.value || !jwksRow.value)) {
     const fresh = await generateAuthKeys();
     jwtRow.value = fresh.JWT_PRIVATE_KEY;
     jwksRow.value = fresh.JWKS;
+    jwtRow.skip = false;
+    jwksRow.skip = false;
     jwtRow.note = "generated now";
     jwksRow.note = "generated now";
   }
 
-  const missing = resolved.filter((r) => r.required && !r.value);
+  // A required value already on the deployment is not missing.
+  const missing = resolved.filter((r) => r.required && !r.value && !r.skip);
 
   console.log(
     `\nAurum Convex env — ${APPLY ? (PROD ? "APPLYING to production" : "APPLYING to dev") : "dry run"}\n`,
@@ -341,7 +399,9 @@ async function main() {
   console.log("");
 
   for (const r of resolved) {
-    const mark = r.value ? "✓" : r.required ? "✗" : "·";
+    // "=" means the deployment already has it and we are not touching it, which
+    // is neither a success nor a gap and must not read as either.
+    const mark = r.skip ? "=" : r.value ? "✓" : r.required ? "✗" : "·";
     const shown = !r.value
       ? "(unset)"
       : SECRET.test(r.name)
@@ -373,7 +433,13 @@ async function main() {
   }
 
   let failed = 0;
+  let kept = 0;
   for (const r of resolved) {
+    if (r.skip) {
+      kept++;
+      console.log(`\nkeeping ${r.name} (already on the deployment)`);
+      continue;
+    }
     if (!r.value) continue;
     console.log(`\nsetting ${r.name} …`);
     if (!convexEnvSet(r.name, r.value)) failed++;
