@@ -335,6 +335,19 @@ export default defineSchema({
     chessaShortId: v.optional(v.string()),
     /** Agent-wallet tx funding Chessa's deposit address (audit, not the player's). */
     tronFloatTxid: v.optional(v.string()),
+    /**
+     * Where the order actually ended up at Chessa, read back after the fact.
+     *
+     * A payout we marked failed is our side of the story; the order may still
+     * be sitting there `awaiting_payment` until it expires, or -- if we funded
+     * it short -- `underpaid`, which is money stopped between two companies and
+     * needs somebody to move it.
+     */
+    chessaOrderStatus: v.optional(v.string()),
+    chessaCheckedAt: v.optional(v.number()),
+    /** Set once a refund of our funding leg has been asked for. */
+    refundRequestedAt: v.optional(v.number()),
+    refundReference: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

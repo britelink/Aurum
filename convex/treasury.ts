@@ -24,6 +24,7 @@ import { internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { roundMoney } from "./railLib";
+import { withdrawableFor } from "./withdrawable";
 
 /** Balances below this are rounding dust, not a holding worth listing. */
 const DUST = 0.005;
@@ -136,6 +137,57 @@ export const myHolding = query({
       chain: "BNB Smart Chain (BEP20)",
       custodyAddress: address,
       custodyUrl: address ? `https://bscscan.com/address/${address}` : null,
+    };
+  },
+});
+
+
+/**
+ * One player's position, for support and for answering "how much can I take
+ * out today" without guessing.
+ *
+ * Internal: it reads another person's money, so it is reachable only with a
+ * deploy key, never from a browser.
+ */
+export const playerStatement = internalQuery({
+  args: { email: v.optional(v.string()), userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const user = args.userId
+      ? await ctx.db.get(args.userId)
+      : args.email
+        ? await ctx.db
+            .query("users")
+            .withIndex("email", (q) =>
+              q.eq("email", args.email!.trim().toLowerCase()),
+            )
+            .first()
+        : null;
+    if (!user) return { found: false as const };
+
+    const w = await withdrawableFor(ctx, user._id);
+    const deposits = await ctx.db
+      .query("cryptoDeposits")
+      .withIndex("by_user_created", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(10);
+
+    return {
+      found: true as const,
+      email: user.email ?? null,
+      balanceUsd: w.balance,
+      holdingUsdt: w.balance,
+      deposited: w.deposited,
+      withdrawn: w.withdrawn,
+      withdrawableToday: w.withdrawable,
+      lockedWinnings: w.locked,
+      partialLedger: w.partial,
+      recentDeposits: deposits.map((d) => ({
+        reference: d.reference,
+        via: d.onrampProvider ?? "crypto",
+        status: d.status,
+        credited: d.amountCredited ?? 0,
+        txHash: d.txHash ?? null,
+      })),
     };
   },
 });

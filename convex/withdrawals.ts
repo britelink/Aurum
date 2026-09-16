@@ -86,6 +86,86 @@ export const listAwaitingSettlement = internalQuery({
   },
 });
 
+/**
+ * Payouts we funded on chain that then failed — real money sitting at Chessa.
+ *
+ * This is the only case where a refund means anything. An order we never funded
+ * holds nothing: the player was already made whole from our side, and the order
+ * simply expires. An order we *did* fund has our USDT in it, and that is the
+ * platform's money to reclaim.
+ */
+export const listFundedOrphans = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("ecocashPayouts").order("desc").take(300);
+    return rows
+      .filter((r) => r.status === "failed" && r.tronFloatTxid && r.chessaOrderId)
+      .map((r) => ({
+        payoutId: r._id,
+        chessaOrderId: r.chessaOrderId!,
+        fundedTx: r.tronFloatTxid!,
+        sentUsdt: r.sgxSendAmount ?? null,
+        error: r.sgxError ?? null,
+      }));
+  },
+});
+
+/** Orders created but never funded — nothing to reclaim, they expire. */
+export const listUnfundedOrphans = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("ecocashPayouts").order("desc").take(300);
+    return rows
+      .filter((r) => r.status === "failed" && !r.tronFloatTxid && r.chessaOrderId)
+      .map((r) => ({
+        payoutId: r._id,
+        chessaOrderId: r.chessaOrderId!,
+        quotedUsdt: r.sgxSendAmount ?? null,
+      }));
+  },
+});
+
+/** Record what Chessa said about an order we did not complete. */
+export const markOrderReconciled = internalMutation({
+  args: {
+    payoutId: v.id("ecocashPayouts"),
+    chessaOrderStatus: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.payoutId);
+    if (!row) return;
+    await ctx.db.patch(args.payoutId, {
+      chessaOrderStatus: args.chessaOrderStatus,
+      chessaCheckedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * A refund of our funding leg has been asked for.
+ *
+ * Only ever reached for an order we actually funded. The reference is kept so
+ * the return transfer can be matched when it arrives — a refund we requested
+ * and then could not recognise on arrival is the same as no refund at all.
+ */
+export const markRefundRequested = internalMutation({
+  args: {
+    payoutId: v.id("ecocashPayouts"),
+    chessaOrderStatus: v.string(),
+    reference: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.payoutId);
+    if (!row || row.refundRequestedAt) return;
+    await ctx.db.patch(args.payoutId, {
+      chessaOrderStatus: args.chessaOrderStatus,
+      chessaCheckedAt: Date.now(),
+      refundRequestedAt: Date.now(),
+      refundReference: args.reference,
+    });
+  },
+});
+
 export const markPayoutSgxSuccess = internalMutation({
   args: {
     payoutId: v.id("ecocashPayouts"),

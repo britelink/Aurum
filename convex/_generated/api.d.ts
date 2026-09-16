@@ -15,6 +15,7 @@ import type * as britelinkSgx from "../britelinkSgx.js";
 import type * as buyCrypto from "../buyCrypto.js";
 import type * as buyCryptoInternal from "../buyCryptoInternal.js";
 import type * as chessaBridge from "../chessaBridge.js";
+import type * as chessaReconcile from "../chessaReconcile.js";
 import type * as crons from "../crons.js";
 import type * as cryptoPayoutNode from "../cryptoPayoutNode.js";
 import type * as cryptoWithdrawals from "../cryptoWithdrawals.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   buyCrypto: typeof buyCrypto;
   buyCryptoInternal: typeof buyCryptoInternal;
   chessaBridge: typeof chessaBridge;
+  chessaReconcile: typeof chessaReconcile;
   crons: typeof crons;
   cryptoPayoutNode: typeof cryptoPayoutNode;
   cryptoWithdrawals: typeof cryptoWithdrawals;

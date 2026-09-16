@@ -62,6 +62,20 @@ crons.interval(
   {},
 );
 
+/*
+ * Close the books on orders we opened at Chessa and did not complete.
+ *
+ * Mostly this marks expired orders as expired. It exists for the rarer case:
+ * an order we funded short, which Chessa will not release and will not hold —
+ * real money stopped between two companies, which nothing else would notice.
+ */
+crons.interval(
+  "reconcile chessa orphan orders",
+  { hours: 1 },
+  internal.chessaReconcile.reconcileOrphanOrders,
+  {},
+);
+
 crons.interval("game heartbeat", { minutes: 5 }, internal.gameEngine.ensureRound, {});
 
 export default crons;
