@@ -41,8 +41,14 @@ export const LATE_MATCH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 /** Confirmations before a detected deposit becomes spendable balance. */
 export const REQUIRED_CONFIRMATIONS = 6;
 
-/** Smallest/largest deposit the rail will quote, in token units. */
-export const MIN_DEPOSIT = 1;
+/**
+ * Smallest/largest deposit the rail will quote, in token units.
+ *
+ * Half a dollar, not one: the point of a penny game is that the entry price is
+ * not a decision. A minimum that exceeds the smallest stake turns "try it" into
+ * "commit first".
+ */
+export const MIN_DEPOSIT = 0.5;
 export const MAX_DEPOSIT = 10_000;
 
 /**
@@ -65,8 +71,13 @@ export const DEFAULT_WITHDRAW_FEE_PERCENT = 1.5;
 /** Floor on the outbound fee, so a dust withdrawal cannot cost the house gas. */
 export const DEFAULT_WITHDRAW_MIN_FEE_USD = 0.25;
 
-/** Smallest withdrawal worth a chain transaction. */
-export const MIN_WITHDRAW_USD = 1;
+/**
+ * Smallest withdrawal worth a chain transaction.
+ *
+ * Matched to the deposit minimum so a player can always take back what they
+ * were allowed to put in — a floor higher than the entry price is a trap.
+ */
+export const MIN_WITHDRAW_USD = 0.5;
 
 export const EXPLORER_BASE = "https://bscscan.com";
 

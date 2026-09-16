@@ -71,14 +71,14 @@ export default function PlayPage() {
          * they were being asked to fund. The chart runs; only the buttons need
          * money.
          */}
-        {balance < 1 && (
+        {balance < 0.5 && (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-5 py-4 dark:border-amber-700/50 dark:bg-amber-900/20">
             <div>
               <p className="font-medium text-slate-900 dark:text-slate-100">
-                Watch as long as you like — you need $1 to take a position.
+                Watch as long as you like — add funds to take a position.
               </p>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Deposits are free and land in a couple of minutes.
+                From $0.50. Deposits are free; stakes are $1 or $2 a round.
               </p>
             </div>
             <Link href="/wallet">

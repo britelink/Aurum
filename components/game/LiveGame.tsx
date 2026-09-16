@@ -30,6 +30,7 @@ import {
   priceFromSeries,
   priceSeries,
 } from "@/convex/gameLib";
+import Link from "next/link";
 import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,7 @@ const CHART_SPAN = 6;
 
 export default function LiveGame() {
   const live = useQuery(api.gameEngine.liveRound);
+  const me = useQuery(api.aurum.myBalance);
   const results = useQuery(api.gameEngine.recentResults, { limit: 10 });
   const placeBet = useMutation(api.gameEngine.placeBet);
   const startIfIdle = useMutation(api.gameEngine.startIfIdle);
@@ -56,6 +58,21 @@ export default function LiveGame() {
 
   const round = live?.round ?? null;
   const myBet = live?.myBet ?? null;
+
+  /*
+   * Nothing is clickable until every input it depends on has arrived.
+   *
+   * `useQuery` returns `undefined` while loading, and reading a balance out of
+   * that with `?? 0` produces a confident zero — so for the first render the
+   * buttons looked live to a player with no funds, and to a funded player they
+   * looked live for the wrong reason. Either way the click reached the server
+   * and came back "Insufficient balance", which reads as the game being broken
+   * rather than as a screen that had not finished loading.
+   *
+   * So: one `ready` flag, and the controls stay inert until it is true.
+   */
+  const ready = live !== undefined && me !== undefined;
+  const balance = me?.balance ?? 0;
 
   /*
    * Clock skew, pinned by observation rather than asked for.
@@ -139,7 +156,8 @@ export default function LiveGame() {
 
   const submit = useCallback(
     async (direction: Direction) => {
-      if (!round || !bettingOpen || myBet || submitting) return;
+      if (!ready || !round || !bettingOpen || myBet || submitting) return;
+      if (balance < betAmount) return;
       setSubmitting(direction);
       try {
         await placeBet({
@@ -155,7 +173,7 @@ export default function LiveGame() {
         setSubmitting(null);
       }
     },
-    [round, bettingOpen, myBet, submitting, placeBet, betAmount],
+    [ready, balance, round, bettingOpen, myBet, submitting, placeBet, betAmount],
   );
 
   if (live === undefined) {
@@ -211,6 +229,8 @@ export default function LiveGame() {
           onSubmit={submit}
           secondsLeft={secondsLeft}
           delta={delta}
+          ready={ready}
+          balance={balance}
         />
       </div>
 
@@ -458,8 +478,12 @@ function Controls(props: {
   onSubmit: (d: Direction) => void;
   secondsLeft: number;
   delta: number;
+  ready: boolean;
+  balance: number;
 }) {
-  const { myBet, bettingOpen } = props;
+  const { myBet, bettingOpen, ready, balance } = props;
+  const canAfford = balance >= props.betAmount;
+  const live = ready && bettingOpen && canAfford;
 
   if (myBet) {
     const winningNow =
@@ -500,6 +524,7 @@ function Controls(props: {
         {([1, 2] as BetAmount[]).map((a) => (
           <button
             key={a}
+            disabled={!ready}
             onClick={() => props.setBetAmount(a)}
             className={cn(
               "rounded-md border px-3 py-1.5 font-mono text-sm transition-colors",
@@ -516,23 +541,33 @@ function Controls(props: {
       <div className="grid grid-cols-2 gap-3">
         <SideButton
           direction="up"
-          disabled={!bettingOpen}
+          disabled={!live}
           busy={props.submitting === "up"}
           onClick={() => props.onSubmit("up")}
         />
         <SideButton
           direction="down"
-          disabled={!bettingOpen}
+          disabled={!live}
           busy={props.submitting === "down"}
           onClick={() => props.onSubmit("down")}
         />
       </div>
 
-      {!bettingOpen && (
+      {/* One line, and only the reason that is actually stopping them. */}
+      {!ready ? (
+        <p className="text-center text-sm text-slate-400">Loading…</p>
+      ) : !canAfford ? (
         <p className="text-center text-sm text-slate-500">
-          Betting is closed — next round in {props.secondsLeft}s
+          You need ${props.betAmount.toFixed(2)} to take this position —{" "}
+          <Link href="/wallet" className="underline underline-offset-2">
+            add funds
+          </Link>
         </p>
-      )}
+      ) : !bettingOpen ? (
+        <p className="text-center text-sm text-slate-500">
+          Round in progress — next one in {props.secondsLeft}s
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -7,6 +7,7 @@
  */
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import {
   INBOUND_CHAIN,
   buildDepositReference,
@@ -108,13 +109,10 @@ export const markPesepayFailed = internalMutation({
  * Idempotent on `status`: the poll chain and a webhook retry can both arrive,
  * and a second credit would be money invented.
  *
- * **This credit is backed by fiat, not USDT.** A crypto deposit puts tokens in
- * the agent wallet that a crypto withdrawal later spends; this one puts USD in
- * a Pesepay merchant account while withdrawals still spend from the agent
- * wallet. Net EcoCash-in / crypto-out therefore drains the on-chain float while
- * cash accumulates at Pesepay, and the two have to be rebalanced by hand. That
- * is an operational cost of collecting directly, and it is the reason the SGX
- * route converted to USDT on the way in.
+ * The credit is immediate and unconditional. The matching USDT is released
+ * from the reserve into the agent wallet on a scheduled action below, so a
+ * reserve that is empty or out of gas delays our accounting, never the
+ * player's money.
  */
 export const creditPaidDeposit = internalMutation({
   args: { depositId: v.id("cryptoDeposits") },
@@ -159,7 +157,52 @@ export const creditPaidDeposit = internalMutation({
       updatedAt: now,
     });
 
+    /*
+     * Release the matching USDT from the reserve into the agent wallet.
+     *
+     * Scheduled, not awaited: the player is credited the moment Pesepay
+     * confirms, and a reserve that is empty or out of gas is the platform's
+     * problem, not theirs. Holding the credit hostage to a treasury transfer
+     * would turn our accounting into their outage.
+     */
+    await ctx.scheduler.runAfter(
+      0,
+      internal.reserveReleaseNode.releaseForEcocashDeposit,
+      { depositId },
+    );
+
     return { credited: true as const, amount };
+  },
+});
+
+/** The reserve transfer landed — the balance is now token-backed on chain. */
+export const markReleased = internalMutation({
+  args: { depositId: v.id("cryptoDeposits"), txHash: v.string() },
+  handler: async (ctx, { depositId, txHash }) => {
+    const row = await ctx.db.get(depositId);
+    if (!row || row.txHash) return;
+    await ctx.db.patch(depositId, { txHash, updatedAt: Date.now() });
+  },
+});
+
+/**
+ * The reserve could not cover it.
+ *
+ * Recorded on the row rather than thrown away, because this is an accounting
+ * shortfall an operator has to clear: the player holds a credited balance that
+ * no token yet backs. Deliberately does not touch `status` — the deposit really
+ * did succeed from the player's side, and marking it failed would be a lie that
+ * also breaks the release retry.
+ */
+export const markReleaseFailed = internalMutation({
+  args: { depositId: v.id("cryptoDeposits"), error: v.string() },
+  handler: async (ctx, { depositId, error }) => {
+    const row = await ctx.db.get(depositId);
+    if (!row) return;
+    await ctx.db.patch(depositId, {
+      onrampError: error.slice(0, 500),
+      updatedAt: Date.now(),
+    });
   },
 });
 

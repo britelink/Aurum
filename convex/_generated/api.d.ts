@@ -30,6 +30,7 @@ import type * as pesepayDeposit from "../pesepayDeposit.js";
 import type * as pesepayDepositInternal from "../pesepayDepositInternal.js";
 import type * as railLib from "../railLib.js";
 import type * as railsSandbox from "../railsSandbox.js";
+import type * as reserveReleaseNode from "../reserveReleaseNode.js";
 import type * as sendLock from "../sendLock.js";
 import type * as sgxCallbackHttp from "../sgxCallbackHttp.js";
 import type * as treasuryBep20 from "../treasuryBep20.js";
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   pesepayDepositInternal: typeof pesepayDepositInternal;
   railLib: typeof railLib;
   railsSandbox: typeof railsSandbox;
+  reserveReleaseNode: typeof reserveReleaseNode;
   sendLock: typeof sendLock;
   sgxCallbackHttp: typeof sgxCallbackHttp;
   treasuryBep20: typeof treasuryBep20;

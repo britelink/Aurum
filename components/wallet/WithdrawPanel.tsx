@@ -33,7 +33,7 @@ import { BackLink, Choice, ReviewCard, ReviewRow, Steps } from "./Wizard";
 type Method = "crypto" | "ecocash";
 const STEPS = ["Destination", "Details", "Confirm"];
 /** Mirrors MIN_WITHDRAW_USD in convex/railLib.ts. */
-const MIN_WITHDRAW = 1;
+const MIN_WITHDRAW = 0.5;
 
 function newIdempotencyKey(): string {
   return `aurw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
