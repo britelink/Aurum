@@ -32,6 +32,8 @@ import { BackLink, Choice, ReviewCard, ReviewRow, Steps } from "./Wizard";
 
 type Method = "crypto" | "ecocash";
 const STEPS = ["Destination", "Details", "Confirm"];
+/** Mirrors MIN_WITHDRAW_USD in convex/railLib.ts. */
+const MIN_WITHDRAW = 1;
 
 function newIdempotencyKey(): string {
   return `aurw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -78,6 +80,45 @@ export default function WithdrawPanel() {
   }, [phone]);
 
   if (me === undefined) return <PanelSpinner />;
+
+  /*
+   * Nothing to withdraw is a state, not a form.
+   *
+   * Offering a destination picker, an amount field and a name check to someone
+   * with $0 asks them to fill in three steps that cannot end in a payout. Say
+   * so at the top and point at the only action that changes it.
+   *
+   * The history stays visible: a player whose last payout failed arrives here
+   * to find out what happened to it, and hiding that behind an empty state is
+   * exactly the wrong moment to go quiet.
+   */
+  if (balance < MIN_WITHDRAW) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center dark:border-gray-700 dark:bg-gray-800/50">
+          <p className="font-medium text-slate-900 dark:text-slate-100">
+            Nothing to withdraw yet
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            {balance > 0
+              ? `You have $${balance.toFixed(2)}. The minimum withdrawal is $${MIN_WITHDRAW.toFixed(2)}.`
+              : "Add funds and win a few rounds, then come back."}
+          </p>
+        </div>
+        <PayoutHistory
+          crypto={cryptoPayouts ?? []}
+          ecocash={(ecocashPayouts ?? []).map((p) => ({
+            id: p._id,
+            status: p.status,
+            netUsd: p.netUsd ?? p.amountUsd,
+            who: p.recipientName ?? p.ecocashPhone,
+            error: p.sgxError ?? null,
+            createdAt: p.createdAt,
+          }))}
+        />
+      </div>
+    );
+  }
 
   const overBalance = parsed > balance;
   const amountOk = quote?.valid === true && !overBalance;

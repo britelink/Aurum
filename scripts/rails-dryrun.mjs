@@ -568,8 +568,10 @@ async function drillDeployment() {
     userId,
     amount: Math.min(5, Math.floor(afterDeposit)),
     ecocashPhone: FAKE_ECOCASH_PHONE,
-    firstName: "Rail",
-    lastName: "Drill",
+    // The name is the network's to supply, not ours — see
+    // chessaBridge.validateEcocashRecipient. The drill passes what the wallet
+    // would have shown after the check.
+    recipientName: "Rail Drill",
     idempotencyKey: `drill-eco-${Date.now()}`,
     dryRun: !LIVE_PAYOUT,
   });

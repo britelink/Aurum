@@ -22,7 +22,8 @@ import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Check, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { Check, Copy, ExternalLink, Loader2, Wallet } from "lucide-react";
+import QRCode from "react-qr-code";
 import { toast } from "react-hot-toast";
 import { cn } from "@/lib/utils";
 import { BackLink, Choice, ReviewCard, ReviewRow, Steps } from "./Wizard";
@@ -340,12 +341,13 @@ function PendingDeposit(props: {
 
       {!detected && (
         <>
+          <PayTarget deposit={d} />
           <CopyField
             label={`Send exactly this much ${d.asset}`}
             value={String(d.amountPayable)}
             mono
             big
-            hint="The last decimals identify your deposit. Send this figure exactly."
+            hint="The last decimals are how we know the money is yours. Send this figure exactly."
           />
           <CopyField
             label={`To this address · ${d.chain}`}
@@ -388,6 +390,60 @@ function PendingDeposit(props: {
           Cancel and start over
         </Button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Scan-to-pay, and the answer to "how does the engine know it was me?"
+ *
+ * It knows by the amount. Every player's deposit lands in the same wallet, so
+ * the figure carries a five-decimal tag unique to this quote — the transfer of
+ * exactly `20.06979 USDT` belongs to exactly one deposit and no other. Nothing
+ * else about the transaction identifies the sender: they may pay from an
+ * exchange, a custodial wallet, an address we have never seen.
+ *
+ * Which is why this is a QR and not a picture of an address. The link is
+ * EIP-681, so a wallet scanning it fills in the token, the recipient **and the
+ * exact amount**. Typing the amount by hand is the one step where the tag gets
+ * rounded away — and a rounded tag is precisely the case the watcher cannot
+ * resolve alone, because it can no longer tell two deposits apart.
+ *
+ * Rendered as inline SVG by `react-qr-code`: no image service, so the address
+ * never leaves the page.
+ */
+function PayTarget({ deposit }: { deposit: Deposit }) {
+  const d = deposit;
+
+  /*
+   * Amount in the token's base units. USDT and USDC are 18-decimal on BSC
+   * (unlike their 6-decimal Ethereum counterparts), and this is built with
+   * string maths rather than floats — 20.06979 * 1e18 in a double loses the
+   * tail, which is the only part that identifies the payer.
+   */
+  const [whole, frac = ""] = String(d.amountPayable).split(".");
+  const baseUnits = `${whole}${frac.padEnd(18, "0").slice(0, 18)}`.replace(
+    /^0+(?=\d)/,
+    "",
+  );
+
+  const payUri = d.tokenAddress
+    ? `ethereum:${d.tokenAddress}@${d.chainId}/transfer?address=${d.depositAddress}&uint256=${baseUnits}`
+    : d.depositAddress;
+
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white p-5 dark:border-gray-700 dark:bg-white">
+      {/* White plate always: a QR inverted by dark mode will not scan. */}
+      <QRCode value={payUri} size={168} level="M" />
+      <p className="text-center text-xs text-slate-500">
+        Scan with your wallet — the amount fills itself in
+      </p>
+      <a href={payUri} className="w-full">
+        <Button variant="outline" className="w-full gap-2">
+          <Wallet className="h-4 w-4" />
+          Open in wallet app
+        </Button>
+      </a>
     </div>
   );
 }

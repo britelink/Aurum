@@ -37,6 +37,8 @@ import {
   roundMoney,
   splitFee,
   tagFromNonce,
+  tokenAddresses,
+  type RailAsset,
 } from "./railLib";
 
 /** Largest difference (in token units) still treated as "the same amount". */
@@ -589,6 +591,16 @@ function serializeDeposit(row: Doc<"cryptoDeposits">) {
     amountCredited: row.amountCredited ?? null,
     depositAddress: row.depositAddress,
     depositAddressUrl: explorerAddressUrl(row.depositAddress),
+    /*
+     * The token contract and chain id, so the wallet can build an EIP-681 link
+     * that prefills the token, the recipient AND the exact amount. Typing the
+     * amount by hand is the one step where the tag gets rounded away, and a
+     * rounded tag is the only case the watcher cannot resolve on its own.
+     */
+    tokenAddress: tokenAddresses(process.env.IS_LIVE === "true")[
+      row.asset as RailAsset
+    ],
+    chainId: process.env.IS_LIVE === "true" ? 56 : 97,
     txHash: row.txHash ?? null,
     txUrl: explorerTxUrl(row.txHash),
     confirmations: row.confirmations ?? 0,

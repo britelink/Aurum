@@ -22,19 +22,15 @@ import type * as depositWatcherNode from "../depositWatcherNode.js";
 import type * as deposits from "../deposits.js";
 import type * as gameEngine from "../gameEngine.js";
 import type * as gameLib from "../gameLib.js";
-import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
 import type * as migrations from "../migrations.js";
 import type * as onChainBalances from "../onChainBalances.js";
 import type * as railLib from "../railLib.js";
 import type * as railsSandbox from "../railsSandbox.js";
-import type * as session from "../session.js";
-import type * as sessionManager from "../sessionManager.js";
 import type * as sgxCallbackHttp from "../sgxCallbackHttp.js";
 import type * as treasuryBep20 from "../treasuryBep20.js";
 import type * as treasuryPayout from "../treasuryPayout.js";
 import type * as treasuryTron from "../treasuryTron.js";
-import type * as withdrawTest from "../withdrawTest.js";
 import type * as withdrawals from "../withdrawals.js";
 
 import type {
@@ -58,19 +54,15 @@ declare const fullApi: ApiFromModules<{
   deposits: typeof deposits;
   gameEngine: typeof gameEngine;
   gameLib: typeof gameLib;
-  helpers: typeof helpers;
   http: typeof http;
   migrations: typeof migrations;
   onChainBalances: typeof onChainBalances;
   railLib: typeof railLib;
   railsSandbox: typeof railsSandbox;
-  session: typeof session;
-  sessionManager: typeof sessionManager;
   sgxCallbackHttp: typeof sgxCallbackHttp;
   treasuryBep20: typeof treasuryBep20;
   treasuryPayout: typeof treasuryPayout;
   treasuryTron: typeof treasuryTron;
-  withdrawTest: typeof withdrawTest;
   withdrawals: typeof withdrawals;
 }>;
 
