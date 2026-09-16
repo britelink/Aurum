@@ -666,7 +666,10 @@ export const myOpenDeposit = query({
       (r) =>
         r.status === "awaiting_payment" ||
         r.status === "underpaid" ||
-        r.status === "detected",
+        r.status === "detected" ||
+        // Settled by Pesepay rather than the chain, but just as much "in
+        // flight" from the player's side.
+        r.status === "awaiting_ecocash",
     );
     return live ? serializeDeposit(live) : null;
   },

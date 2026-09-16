@@ -26,6 +26,8 @@ import type * as gameLib from "../gameLib.js";
 import type * as http from "../http.js";
 import type * as migrations from "../migrations.js";
 import type * as onChainBalances from "../onChainBalances.js";
+import type * as pesepayDeposit from "../pesepayDeposit.js";
+import type * as pesepayDepositInternal from "../pesepayDepositInternal.js";
 import type * as railLib from "../railLib.js";
 import type * as railsSandbox from "../railsSandbox.js";
 import type * as sendLock from "../sendLock.js";
@@ -60,6 +62,8 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   migrations: typeof migrations;
   onChainBalances: typeof onChainBalances;
+  pesepayDeposit: typeof pesepayDeposit;
+  pesepayDepositInternal: typeof pesepayDepositInternal;
   railLib: typeof railLib;
   railsSandbox: typeof railsSandbox;
   sendLock: typeof sendLock;

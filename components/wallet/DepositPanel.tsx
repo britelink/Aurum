@@ -32,18 +32,22 @@ import { BackLink, Choice, ReviewCard, ReviewRow, Steps } from "./Wizard";
 type Route = "send" | "ecocash";
 const STEPS = ["Method", "Amount", "Confirm"];
 
-/** SGX takes 2% off the fiat, so delivering X costs X/(1-0.02) — not X×1.02. */
-function fiatForCrypto(usdt: number): number {
-  return Math.round((usdt / 0.98 + 0.005) * 100) / 100;
-}
-
 export default function DepositPanel() {
   const rail = useQuery(api.deposits.depositRailStatus);
   const open = useQuery(api.deposits.myOpenDeposit);
   const createDeposit = useMutation(api.deposits.createDeposit);
   const cancelDeposit = useMutation(api.deposits.cancelDeposit);
-  const topUpWithEcocash = useAction(api.buyCrypto.topUpWithEcocash);
-  const ecocashStatus = useAction(api.buyCrypto.ecocashTopUpStatus);
+  /*
+   * Our own Pesepay merchant account, not SGX's partner bridge.
+   *
+   * The bridge asserted Pesepay was open *on SGX*, so when they switched to ZB
+   * our deposits went dark while our own credentials were working fine. Aurum
+   * is a child product with its own keys; collecting directly removes a
+   * dependency that could be turned off by someone solving an unrelated
+   * problem.
+   */
+  const startEcocashDeposit = useAction(api.pesepayDeposit.startEcocashDeposit);
+  const ecocashStatus = useAction(api.pesepayDeposit.ecocashDepositStatus);
 
   /*
    * Ask once, on mount, whether the EcoCash route can actually complete.
@@ -140,10 +144,10 @@ export default function DepositPanel() {
     setFailure(null);
     try {
       if (route === "ecocash") {
-        const out = await topUpWithEcocash({ amount: n, payerPhone: phone });
+        const out = await startEcocashDeposit({ amount: n, payerPhone: phone });
         setEcocashRef({
-          reference: out.referenceNumber,
-          fiatAmount: out.fiatAmount,
+          reference: out.pesepayReference,
+          fiatAmount: out.amount,
           phone: out.payerPhone,
         });
       } else {
@@ -267,10 +271,7 @@ export default function DepositPanel() {
             {route === "ecocash" ? (
               <>
                 <ReviewRow label="Pay from" value={phone} />
-                <ReviewRow
-                  label="You pay on EcoCash"
-                  value={`$${fiatForCrypto(n).toFixed(2)}`}
-                />
+                <ReviewRow label="You pay on EcoCash" value={`$${n.toFixed(2)}`} />
                 <ReviewRow
                   label="Credited to your balance"
                   value={`$${n.toFixed(2)}`}
@@ -294,7 +295,11 @@ export default function DepositPanel() {
             )}
             <ReviewRow
               label="Available after"
-              value={`${rail.requiredConfirmations} confirmations, ~1–3 min`}
+              value={
+                route === "ecocash"
+                  ? "You approve on your phone, then straight away"
+                  : `${rail.requiredConfirmations} confirmations, ~1–3 min`
+              }
               muted
             />
           </ReviewCard>
@@ -315,7 +320,7 @@ export default function DepositPanel() {
           >
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {route === "ecocash"
-              ? `Send EcoCash prompt for $${fiatForCrypto(n).toFixed(2)}`
+              ? `Send EcoCash prompt for $${n.toFixed(2)}`
               : "Get my deposit address"}
           </Button>
         </div>
