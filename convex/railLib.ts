@@ -68,8 +68,20 @@ export const DEPOSIT_FEE_PERCENT = 0;
  */
 export const DEFAULT_WITHDRAW_FEE_PERCENT = 1.5;
 
-/** Floor on the outbound fee, so a dust withdrawal cannot cost the house gas. */
-export const DEFAULT_WITHDRAW_MIN_FEE_USD = 0.25;
+/**
+ * Floor on the outbound fee, so a dust withdrawal cannot cost the house gas.
+ *
+ * Five cents, measured rather than guessed. A BEP-20 transfer on BSC is ~60k
+ * gas at ~0.05 gwei, which is about **$0.002** — so this carries roughly 25x
+ * headroom for a gas spike and still stays out of the way.
+ *
+ * It was $0.25, set when the minimum withdrawal was $1. Dropping the minimum to
+ * $0.50 turned that floor into a 50% fee at the bottom of the range, and 25% at
+ * a dollar: a penny game whose cheapest withdrawal costs half of itself is one
+ * nobody withdraws from, and a fee that large stops being a cost recovery and
+ * becomes a reason not to have deposited.
+ */
+export const DEFAULT_WITHDRAW_MIN_FEE_USD = 0.05;
 
 /**
  * Smallest withdrawal worth a chain transaction.

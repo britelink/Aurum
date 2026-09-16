@@ -31,6 +31,8 @@
 
 import { spawnSync } from "node:child_process";
 
+const MIN_DEPOSIT_FOR_CHECK = 0.5;
+
 import {
   DEPOSIT_FEE_PERCENT,
   MIN_WITHDRAW_USD,
@@ -181,6 +183,19 @@ function drillDeposits() {
 
   // The credit path: what arrives is what is credited while the fee is zero.
   const { fee, net } = splitFee(25.04321, DEPOSIT_FEE_PERCENT);
+  /*
+   * The tag is credited, not skimmed — so it inflates what the player sends
+   * but never what they receive. At the $0.50 minimum the tag can be a fifth of
+   * the deposit, which would be indefensible if it were a fee; it is checked
+   * here precisely because it must stay not-a-fee.
+   */
+  const smallPayable = buildPayableAmount(MIN_DEPOSIT_FOR_CHECK, tagFromNonce(9999));
+  check(
+    "a minimum deposit credits at least what was asked for",
+    smallPayable >= MIN_DEPOSIT_FOR_CHECK,
+    `asked ${MIN_DEPOSIT_FOR_CHECK}, sends ${smallPayable}`,
+  );
+
   check(
     "a free deposit credits the full arrival",
     fee === 0 && near(net, 25.04321),
@@ -234,6 +249,24 @@ function drillWithdrawals() {
     "the fee stays low on a real withdrawal",
     big.fee / big.gross <= 0.03,
     `$100 costs ${big.fee} (${((big.fee / big.gross) * 100).toFixed(2)}%)`,
+  );
+
+  /*
+   * The floor is the whole risk at the bottom of the range. A BEP-20 transfer
+   * costs about $0.002, so a floor anywhere near a quarter is not cost recovery
+   * — and at a $0.50 minimum it silently became a 50% charge.
+   */
+  const atMin = computeWithdrawFee(MIN_WITHDRAW_USD);
+  check(
+    "the smallest withdrawal is not eaten by the fee floor",
+    atMin.fee / atMin.gross <= 0.12,
+    `$${MIN_WITHDRAW_USD} costs ${atMin.fee} (${((atMin.fee / atMin.gross) * 100).toFixed(0)}% of it)`,
+  );
+  const atOne = computeWithdrawFee(1);
+  check(
+    "a $1 withdrawal keeps most of itself",
+    atOne.net >= 0.9,
+    `$1 nets ${atOne.net}`,
   );
 
   check(
