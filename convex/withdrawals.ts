@@ -19,6 +19,8 @@ import {
   normalizeE164Zimbabwe,
   quoteEcocashPayout,
   roundMoney,
+  withdrawalPauseMessage,
+  withdrawalsPaused,
 } from "./railLib";
 import { withdrawableFor, lockedExplanation } from "./withdrawable";
 
@@ -344,6 +346,8 @@ export async function queueEcocashPayoutFor(
     dryRun?: boolean;
   },
 ) {
+  if (withdrawalsPaused()) throw new Error(withdrawalPauseMessage());
+
   const amount = roundMoney(args.amount);
   if (amount < MIN_USD) {
     throw new Error(`Minimum withdrawal is $${MIN_USD}`);

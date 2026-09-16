@@ -477,3 +477,36 @@ export function minEcocashGrossWithFee(minNet: number): number {
   }
   return roundMoney(minNet + chessaPayoutFeeUsd() + 1);
 }
+
+
+/**
+ * Withdrawals off, deliberately.
+ *
+ * A flag rather than removed code, because the reason is temporary: the payout
+ * float is thin and the house has no capital behind it yet. Turning it back on
+ * should be one env change, not a deploy and a re-review of code somebody
+ * commented out.
+ *
+ * Read on the **server**, in both payout mutations. Hiding the form is a
+ * courtesy to whoever is looking at it; the gate is the thing that stops a
+ * direct call to the mutation, and a switch that only exists in the UI is not
+ * a switch.
+ */
+export function withdrawalsPaused(): boolean {
+  return process.env.AURUM_WITHDRAWALS_PAUSED?.trim() === "true";
+}
+
+/**
+ * What to tell the player.
+ *
+ * Says the real reason. "Temporarily unavailable" invites the suspicion that
+ * their money is gone; naming the float makes it a capacity problem with an
+ * end, and the balance stays visible and intact behind it.
+ */
+export function withdrawalPauseMessage(): string {
+  return (
+    process.env.AURUM_WITHDRAWALS_PAUSED_MESSAGE?.trim() ||
+    "Withdrawals are paused while we top up the payout float. Your balance is " +
+      "safe and unchanged, and you can keep playing — cash-outs will reopen shortly."
+  );
+}

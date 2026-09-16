@@ -29,6 +29,8 @@ import {
   computeWithdrawFee,
   minEcocashGrossWithFee,
   quoteEcocashPayout,
+  withdrawalPauseMessage,
+  withdrawalsPaused,
   explorerAddressUrl,
   explorerTxUrl,
   isEvmAddress,
@@ -62,6 +64,10 @@ export async function queueCryptoPayoutFor(
     dryRun?: boolean;
   },
 ) {
+  // The real gate. The UI notice is a courtesy; this is what stops a direct
+  // call to the mutation.
+  if (withdrawalsPaused()) throw new ConvexError(withdrawalPauseMessage());
+
   const asset = (args.asset ?? "USDT").trim().toUpperCase();
   if (!isRailAsset(asset)) {
     throw new ConvexError(`Unsupported asset: ${asset}. Use USDT or USDC.`);
@@ -317,6 +323,7 @@ export const myCryptoPayouts = query({
 export const quoteWithdrawal = query({
   args: { amount: v.number() },
   handler: async (ctx, { amount }) => {
+    const paused = withdrawalsPaused();
     // Chessa's live floor when we have it cached, our constant otherwise.
     const minNet = await readEcocashMinNet(ctx);
     const gross = roundMoney(amount);
@@ -358,6 +365,8 @@ export const quoteWithdrawal = query({
       ecocashFee: chessaPayoutFeeUsd(),
       ecocashDelivered: eco?.delivered ?? null,
       ecocashOk: Boolean(eco && eco.delivered >= minNet),
+      paused,
+      pauseMessage: paused ? withdrawalPauseMessage() : null,
       withdrawable: allowance?.withdrawable ?? null,
       lockedWinnings: allowance?.locked ?? null,
       overAllowance: allowance ? gross > allowance.withdrawable + 1e-9 : false,

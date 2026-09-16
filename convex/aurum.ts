@@ -3,6 +3,7 @@ import { query, mutation, action, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { withdrawableFor } from "./withdrawable";
+import { withdrawalPauseMessage, withdrawalsPaused } from "./railLib";
 import {
   formatSgxPartnerApiError,
   getSgxV0BaseUrl,
@@ -252,6 +253,8 @@ export const myBalance = query({
       email: user.email ?? null,
       balance: user.balance ?? 0,
       // Split out so the wallet can show what is cashable and what is winnings.
+      withdrawalsPaused: withdrawalsPaused(),
+      withdrawalPauseMessage: withdrawalsPaused() ? withdrawalPauseMessage() : null,
       withdrawable: allowance.withdrawable,
       lockedWinnings: allowance.locked,
       deposited: allowance.deposited,

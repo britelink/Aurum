@@ -90,6 +90,45 @@ export default function WithdrawPanel() {
   if (me === undefined) return <PanelSpinner />;
 
   /*
+   * Paused: show why, and keep the balance and history visible.
+   *
+   * A blank "unavailable" invites the reading that the money is gone. Naming
+   * the float makes it a capacity problem with an end, and leaving the payout
+   * history on screen lets someone confirm their last cash-out still landed.
+   */
+  if (me?.withdrawalsPaused) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 dark:border-amber-700/50 dark:bg-amber-900/20">
+          <p className="font-medium text-slate-900 dark:text-slate-100">
+            Withdrawals are paused
+          </p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            {me.withdrawalPauseMessage}
+          </p>
+          <div className="mt-3 flex justify-between border-t border-amber-300/50 pt-3 text-sm dark:border-amber-700/40">
+            <span className="text-slate-500">Your balance, unchanged</span>
+            <span className="font-mono font-medium text-slate-900 dark:text-slate-100">
+              ${balance.toFixed(2)}
+            </span>
+          </div>
+        </div>
+        <PayoutHistory
+          crypto={cryptoPayouts ?? []}
+          ecocash={(ecocashPayouts ?? []).map((p) => ({
+            id: p._id,
+            status: p.status,
+            netUsd: p.netUsd ?? p.amountUsd,
+            who: p.recipientName ?? p.ecocashPhone,
+            error: p.sgxError ?? null,
+            createdAt: p.createdAt,
+          }))}
+        />
+      </div>
+    );
+  }
+
+  /*
    * Nothing to withdraw is a state, not a form.
    *
    * Offering a destination picker, an amount field and a name check to someone
