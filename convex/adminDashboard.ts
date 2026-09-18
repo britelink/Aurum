@@ -22,6 +22,27 @@ import {
 } from "./railLib";
 import { withdrawableFor } from "./withdrawable";
 
+/**
+ * Scan caps.
+ *
+ * Both tables are read whole rather than through a running counter, so a bad
+ * write cannot quietly corrupt the totals — but a Convex query may not read
+ * unbounded documents, so the reads stop here and say so. `ledgerTruncated`
+ * and `usersTruncated` travel with the figures precisely so the dashboard can
+ * admit the totals are partial instead of rendering a confident wrong number.
+ */
+const USER_SCAN_CAP = 5000;
+const LEDGER_SCAN_CAP = 8000;
+
+/**
+ * How far back "active" reaches.
+ *
+ * Bets are deleted along with their round once history rolls past
+ * `HISTORY_KEEP` rounds, so this window is in practice capped by retention —
+ * it is a live-activity gauge, not a retention metric.
+ */
+const ACTIVE_WINDOW_MS = 10 * 60 * 1000;
+
 function parseCsvEnv(name: string): string[] {
   const raw = process.env[name];
   if (!raw) return [];
@@ -67,7 +88,7 @@ export const overview = query({
   handler: async (ctx) => {
     await requireAdmin(ctx as never);
 
-    const users = await ctx.db.query("users").take(2000);
+    const users = await ctx.db.query("users").take(USER_SCAN_CAP);
 
     let owed = 0;
     let withdrawable = 0;
@@ -84,12 +105,17 @@ export const overview = query({
     }
 
     // Volume, from the ledger rather than from a counter that could drift.
-    const ledger = await ctx.db.query("transactions").order("desc").take(3000);
+    const ledger = await ctx.db
+      .query("transactions")
+      .order("desc")
+      .take(LEDGER_SCAN_CAP);
     let depositedAllTime = 0;
     let withdrawnAllTime = 0;
     let feesEarned = 0;
     let staked = 0;
     let won = 0;
+    let refunded = 0;
+    let betCount = 0;
     for (const t of ledger) {
       if (t.type === "deposit" && t.status === "completed" && t.amount > 0) {
         depositedAllTime += t.amount;
@@ -98,8 +124,12 @@ export const overview = query({
         withdrawnAllTime += Math.abs(t.amount);
       }
       if (t.fee) feesEarned += t.fee;
-      if (t.type === "stake") staked += Math.abs(t.amount);
+      if (t.type === "stake") {
+        staked += Math.abs(t.amount);
+        betCount++;
+      }
       if (t.type === "win") won += t.amount;
+      if (t.type === "refund") refunded += t.amount;
     }
 
     // House rake, straight from the rounds that produced it.
@@ -123,6 +153,9 @@ export const overview = query({
     }
 
     return {
+      /** Everyone with an account, whether or not they hold a cent. */
+      totalUsers: users.length,
+      usersTruncated: users.length >= USER_SCAN_CAP,
       holders,
       owedUsd: roundMoney(owed),
       /** What the float must hold in tokens to cover it. */
@@ -135,9 +168,110 @@ export const overview = query({
       houseRake: roundMoney(rake),
       staked: roundMoney(staked),
       won: roundMoney(won),
+      refunded: roundMoney(refunded),
+      betCount,
+      /** Deposits less withdrawals: what players have actually left with us. */
+      netInflow: roundMoney(depositedAllTime - withdrawnAllTime),
+      /** Staked less paid out — the table's margin, rake included. */
+      grossGamingRevenue: roundMoney(staked - won),
       roundsSettled: rounds.length,
       usdPerUsdt,
-      ledgerTruncated: ledger.length >= 3000,
+      ledgerTruncated: ledger.length >= LEDGER_SCAN_CAP,
+    };
+  },
+});
+
+/**
+ * Who is at the table right now.
+ *
+ * Three different populations, kept apart because operators conflate them and
+ * then misread the platform: everyone who ever signed up, everyone who has
+ * staked in the last few minutes, and the people with money on *this* round.
+ * The last is the only one that moves second to second, and it is the one a
+ * one-sided round — which voids and pays nobody — shows up in first.
+ *
+ * "Active" is derived from bets rather than from a presence heartbeat: there is
+ * no session table, and a figure counting open browser tabs would flatter the
+ * platform without meaning anything. Somebody who staked a dollar is provably
+ * there.
+ */
+export const liveSession = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx as never);
+    const now = Date.now();
+
+    // Recent stakers across whatever rounds history still holds. One read of
+    // the bets table, newest first, rather than a query per retained round.
+    const recentBets = await ctx.db.query("bets").order("desc").take(500);
+    const activeUsers = new Set<string>();
+    for (const b of recentBets) {
+      if (b._creationTime < now - ACTIVE_WINDOW_MS) break;
+      activeUsers.add(String(b.userId));
+    }
+
+    const round =
+      (await ctx.db
+        .query("sessions")
+        .withIndex("by_status", (q) => q.eq("status", "open"))
+        .first()) ??
+      (await ctx.db
+        .query("sessions")
+        .withIndex("by_status", (q) => q.eq("status", "processing"))
+        .first());
+
+    const base = {
+      activeUsers: activeUsers.size,
+      activeWindowMinutes: ACTIVE_WINDOW_MS / 60000,
+    };
+
+    // No live round is a real state, not an error: the engine sleeps when the
+    // table is empty and the cron reopens it. Say so rather than showing zeros
+    // that read as "nobody is playing".
+    if (!round) return { ...base, round: null };
+
+    const bets = await ctx.db
+      .query("bets")
+      .withIndex("by_session", (q) => q.eq("sessionId", round._id))
+      .collect();
+
+    const playersInRound = new Set(bets.map((b) => String(b.userId)));
+    const staked = bets.reduce((sum, b) => sum + b.amount, 0);
+    const betting = round.status === "open" && now < round.endTime;
+
+    return {
+      ...base,
+      round: {
+        id: round._id,
+        status: round.status,
+        /** What the table is doing, as opposed to what the row says. */
+        phase: betting ? ("betting" as const) : ("settling" as const),
+        startTime: round.startTime,
+        endTime: round.endTime,
+        processingEndTime: round.processingEndTime,
+        secondsLeft: Math.max(
+          0,
+          Math.ceil(
+            ((betting ? round.endTime : round.processingEndTime) - now) / 1000,
+          ),
+        ),
+        /** Distinct accounts with money on this round. */
+        players: playersInRound.size,
+        bets: bets.length,
+        stakedUsd: roundMoney(staked),
+        upCount: bets.filter((b) => b.direction === "up").length,
+        downCount: bets.filter((b) => b.direction === "down").length,
+        buyVolume: roundMoney(round.totalBuyVolume),
+        sellVolume: roundMoney(round.totalSellVolume),
+        /**
+         * A book with nothing on one side has no losing pool, so the round
+         * voids and every stake comes back. Worth flagging before it settles.
+         */
+        willVoid:
+          bets.length === 0 ||
+          !bets.some((b) => b.direction === "up") ||
+          !bets.some((b) => b.direction === "down"),
+      },
     };
   },
 });
