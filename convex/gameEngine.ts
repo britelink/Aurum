@@ -8,8 +8,8 @@
  *     action invocations a day whether or not anybody was playing, each one
  *     running a query. Rounds have exactly two interesting instants, so this
  *     schedules work *at* them (`scheduler.runAt`) and sleeps in between: two
- *     mutations a minute instead of sixty actions, and zero when the table is
- *     idle and nothing is scheduled. A five-minute cron is the only heartbeat,
+ *     mutations a round instead of sixty actions a minute, and zero when the
+ *     table is idle and nothing is scheduled. A five-minute cron is the only heartbeat,
  *     and it exists solely to restart the chain if a deploy drops a scheduled
  *     job.
  *

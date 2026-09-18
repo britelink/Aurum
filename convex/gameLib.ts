@@ -10,13 +10,13 @@
  * The previous build generated the walk locally in each browser with
  * `Math.random()`. It cost nothing either — but no two players were ever
  * watching the same game, and the "result" had no relationship to the chart
- * anyone had been staring at for thirty seconds.
+ * anyone had been staring at for the whole round.
  */
 
 /** Betting is open for this long. */
-export const BETTING_MS = 30_000;
+export const BETTING_MS = 15_000;
 /** Then the price runs, and where it lands decides the round. */
-export const PROCESSING_MS = 30_000;
+export const PROCESSING_MS = 15_000;
 export const ROUND_MS = BETTING_MS + PROCESSING_MS;
 
 /** Sample spacing of the underlying walk. Between samples the chart interpolates. */

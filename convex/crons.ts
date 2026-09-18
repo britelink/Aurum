@@ -5,7 +5,7 @@ import { internal } from "./_generated/api";
  * Three jobs, deliberately.
  *
  * The round engine is *not* on a cron: it schedules itself at the two instants
- * a round actually has (`scheduler.runAt`), so it costs two mutations a minute
+ * a round actually has (`scheduler.runAt`), so it costs two mutations a round
  * while people are playing and nothing at all when they are not. The old build
  * woke every second whether or not the table was occupied.
  *

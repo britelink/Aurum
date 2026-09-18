@@ -90,7 +90,7 @@ export default function PlayPage() {
         <LiveGame />
 
         <p className="mt-4 text-center text-xs text-slate-500">
-          30 seconds to take a side, 30 seconds for the price to run. Winners
+          15 seconds to take a side, 15 seconds for the price to run. Winners
           share the losing pool after an 8% house cut; a one-sided round is
           voided and every stake comes back.
         </p>
