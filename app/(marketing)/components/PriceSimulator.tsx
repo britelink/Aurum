@@ -343,8 +343,8 @@ export default function PriceSimulator() {
       {showTooltip && (
         <div className="mt-3 bg-blue-50 dark:bg-blue-900/30 p-3 rounded-md text-sm text-blue-800 dark:text-blue-200">
           {selectedBet === "up"
-            ? "You bet the line will go UP. Wait for the result!"
-            : "You bet the line will go DOWN. Wait for the result!"}
+            ? "You predicted the line will go UP. Wait for the result!"
+            : "You predicted the line will go DOWN. Wait for the result!"}
         </div>
       )}
     </div>

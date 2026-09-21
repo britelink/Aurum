@@ -295,7 +295,7 @@ export default function MarketChart() {
           <div className="font-medium text-slate-800 dark:text-white">30s</div>
         </div>
         <div className="text-center">
-          <div className="text-blue-500 dark:text-blue-300">MIN BET</div>
+          <div className="text-blue-500 dark:text-blue-300">MIN STAKE</div>
           <div className="font-medium text-slate-800 dark:text-white">$1</div>
         </div>
       </div>

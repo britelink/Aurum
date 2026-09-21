@@ -7,7 +7,7 @@ export default function About() {
     <>
       <Hero
         title="About Penny Game"
-        subtitle="Redefining the online betting experience with innovative, transparent, and rewarding prediction markets."
+        subtitle="Redefining online prediction markets — innovative, transparent, and rewarding."
       />
 
       <section className="py-16 px-6 bg-background">
@@ -16,7 +16,7 @@ export default function About() {
             <div>
               <h2 className="text-3xl font-serif font-bold mb-6">Our Vision</h2>
               <p className="text-lg text-muted-foreground mb-6">
-                Penny Game was founded with a clear vision: to create a betting
+                Penny Game was founded with a clear vision: to create a prediction
                 platform that is fair, transparent, and rewarding for all
                 participants.
               </p>
@@ -389,7 +389,7 @@ export default function About() {
           </h2>
           <p className="text-lg text-blue-700 dark:text-blue-200 mb-8 max-w-2xl mx-auto">
             Start playing now and experience the next generation of online
-            betting with Penny Game.
+            prediction markets with Penny Game.
           </p>
 
           <AurumButton

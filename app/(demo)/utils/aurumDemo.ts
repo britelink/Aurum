@@ -247,7 +247,7 @@ export function generateSimulatedSession(
  */
 export function getSessionSummary(result: SessionResult): string {
   if (result.isFoul) {
-    return "Session resulted in a foul (all bets on same side). No money lost.";
+    return "Session resulted in a foul (everyone on the same side). No money lost.";
   }
 
   if (result.isNeutral) {

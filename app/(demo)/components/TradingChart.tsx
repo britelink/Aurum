@@ -694,7 +694,7 @@ export default function TradingChart({
       }
     } catch (e) {
       console.error("Withdraw funds failed:", e);
-      alert("Failed to place bet. Please try again.");
+      alert("Failed to take a position. Please try again.");
       return; // stop if withdrawal fails
     }
     setIsTrading(true);
@@ -1053,7 +1053,7 @@ export default function TradingChart({
             <div className="bg-white dark:bg-slate-800 p-4 rounded-lg max-w-xs text-center">
               <div className="text-xl font-bold mb-2">
                 {sessionResult.isNeutral
-                  ? "It's a Tie! Same bets on both sides."
+                  ? "It's a Tie! Everyone took the same side."
                   : `${sessionResult.winningPosition === "buy" ? "UP" : "DOWN"} Wins!`}
               </div>
               {!sessionResult.isNeutral && (
@@ -1160,12 +1160,12 @@ export default function TradingChart({
           <div className="text-center">
             <div className="text-blue-500 dark:text-blue-300">ROUND</div>
             <div className="font-medium text-slate-800 dark:text-white">
-              {isTrading ? `${countDown}s left` : "Ready to bet!"}
+              {isTrading ? `${countDown}s left` : "Ready to play!"}
             </div>
           </div>
 
           <div className="text-center">
-            <div className="text-blue-500 dark:text-blue-300">MY BET</div>
+            <div className="text-blue-500 dark:text-blue-300">MY POSITION</div>
             <div className="font-medium text-slate-800 dark:text-white">
               ${betAmount}
             </div>

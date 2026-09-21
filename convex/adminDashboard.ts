@@ -237,7 +237,7 @@ export const liveSession = query({
 
     const playersInRound = new Set(bets.map((b) => String(b.userId)));
     const staked = bets.reduce((sum, b) => sum + b.amount, 0);
-    const betting = round.status === "open" && now < round.endTime;
+    const accepting = round.status === "open" && now < round.endTime;
 
     return {
       ...base,
@@ -245,14 +245,15 @@ export const liveSession = query({
         id: round._id,
         status: round.status,
         /** What the table is doing, as opposed to what the row says. */
-        phase: betting ? ("betting" as const) : ("settling" as const),
+        phase: accepting ? ("entries" as const) : ("settling" as const),
         startTime: round.startTime,
         endTime: round.endTime,
         processingEndTime: round.processingEndTime,
         secondsLeft: Math.max(
           0,
           Math.ceil(
-            ((betting ? round.endTime : round.processingEndTime) - now) / 1000,
+            ((accepting ? round.endTime : round.processingEndTime) - now) /
+              1000,
           ),
         ),
         /** Distinct accounts with money on this round. */

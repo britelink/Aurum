@@ -135,8 +135,18 @@ export default function LiveGame() {
 
   const serverNow = now + skew;
   const elapsed = round ? serverNow - round.startTime : 0;
+  /*
+   * The phase comes from the round's own boundaries, not from `BETTING_MS`.
+   *
+   * Both are usually the same number — `openRound` stamps `endTime` from that
+   * constant. They come apart across a deploy that changes it: rounds already
+   * in flight keep the timings they were created with, and a browser holding
+   * the new constant would close its betting window early and then count down
+   * to a boundary the server does not agree with. The row is the authority on
+   * its own round; the constant only describes rounds not yet opened.
+   */
   const bettingOpen =
-    round !== null && round.status === "open" && elapsed < BETTING_MS;
+    round !== null && round.status === "open" && serverNow < round.endTime;
   const secondsLeft = round
     ? Math.max(
         0,
@@ -152,7 +162,7 @@ export default function LiveGame() {
   const axis = round?.neutralAxis ?? 0;
   // Before betting closes the axis has not been crossed yet, so there is no
   // "winning side" to colour — showing one would be inventing a result.
-  const delta = round && elapsed >= BETTING_MS ? price - axis : 0;
+  const delta = round && serverNow >= round.endTime ? price - axis : 0;
 
   const submit = useCallback(
     async (direction: Direction) => {
@@ -166,7 +176,8 @@ export default function LiveGame() {
           direction,
         });
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Could not place that bet";
+        const msg =
+          e instanceof Error ? e.message : "Could not take that position";
         // Convex wraps thrown errors; the useful sentence is the last line.
         toast.error(msg.split("\n").pop() ?? msg);
       } finally {
@@ -289,7 +300,7 @@ function Header(props: {
         />
         <div className="text-right">
           <div className="text-[11px] uppercase tracking-wide text-slate-400">
-            {props.bettingOpen ? "Betting closes" : "Result in"}
+            {props.bettingOpen ? "Entries close" : "Result in"}
           </div>
           <div
             className={cn(
@@ -406,7 +417,7 @@ function Chart(props: {
           className="text-slate-400/60"
         />
 
-        {/* Where betting closed — everything right of it is what you are paid on. */}
+        {/* Where entries closed — everything right of it is what you are paid on. */}
         <line
           x1={closeX}
           y1="0"
@@ -463,7 +474,7 @@ function Chart(props: {
       )}
 
       <div className="pointer-events-none absolute bottom-3 left-4 text-[11px] uppercase tracking-wide text-slate-400">
-        {props.bettingOpen ? "Betting open" : "Settling"}
+        {props.bettingOpen ? "Entries open" : "Settling"}
       </div>
     </div>
   );

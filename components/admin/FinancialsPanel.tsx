@@ -109,7 +109,7 @@ export default function FinancialsPanel() {
             <Line
               label="Total staked"
               value={usd(o.staked)}
-              hint={`${o.betCount.toLocaleString()} bets`}
+              hint={`${o.betCount.toLocaleString()} entries`}
             />
             <Line label="Paid to winners" value={usd(o.won)} />
             <Line label="Refunded (void rounds)" value={usd(o.refunded)} />

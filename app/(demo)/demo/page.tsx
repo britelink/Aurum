@@ -233,7 +233,7 @@ export default function TradingDemoPage() {
                   <span className="text-emerald-500 dark:text-emerald-400">
                     👉
                   </span>
-                  Watch if the line is trending up or down before betting.
+                  Watch if the line is trending up or down before you take a side.
                 </p>
                 <p>
                   <span className="text-amber-500 dark:text-amber-400">👉</span>

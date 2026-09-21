@@ -61,12 +61,12 @@ export default function LivePanel() {
         {round ? (
           <span
             className={
-              round.phase === "betting"
+              round.phase === "entries"
                 ? "rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
                 : "rounded-full bg-blue-500/15 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:text-blue-300"
             }
           >
-            {round.phase === "betting" ? "betting open" : "settling"} ·{" "}
+            {round.phase === "entries" ? "entries open" : "settling"} ·{" "}
             {round.secondsLeft}s
           </span>
         ) : null}
@@ -88,7 +88,11 @@ export default function LivePanel() {
         <Tile
           label="This round"
           value={loading ? "…" : String(round?.players ?? 0)}
-          hint={round ? `${round.bets} bet${round.bets === 1 ? "" : "s"}` : "no round"}
+          hint={
+            round
+              ? `${round.bets} entr${round.bets === 1 ? "y" : "ies"}`
+              : "no round"
+          }
         />
       </div>
 
