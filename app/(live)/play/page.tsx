@@ -89,10 +89,16 @@ export default function PlayPage() {
 
         <LiveGame />
 
+        {/*
+          The round timings used to be stated here and were wrong — 15s and 15s
+          against an engine that runs 30s and 30s. The countdown on the chart is
+          the authoritative figure and it is always correct, so restating it in
+          prose could only ever go stale. What is left is the part the UI does
+          not otherwise say: how a round pays.
+        */}
         <p className="mt-4 text-center text-xs text-slate-500">
-          15 seconds to take a side, 15 seconds for the price to run. Winners
-          share the losing pool after an 8% house cut; a one-sided round is
-          voided and every stake comes back.
+          Winners share the losing pool after an 8% house cut. A one-sided round
+          is voided and every stake comes back.
         </p>
       </main>
     </div>

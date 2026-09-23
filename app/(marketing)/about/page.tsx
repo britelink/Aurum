@@ -140,7 +140,8 @@ export default function About() {
                     3.
                   </span>
                   <span>
-                    5-second settlement period with instant profit distribution
+                    Winners are paid from the losing pool as soon as the round
+                    settles
                   </span>
                 </li>
                 <li className="text-blue-800 dark:text-blue-100 flex items-start">
@@ -296,11 +297,11 @@ export default function About() {
               <div className="space-y-6 mb-8">
                 <div className="bg-blue-50/80 backdrop-blur-sm dark:bg-slate-800/60 border border-blue-100 dark:border-blue-900/50 p-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-300">
                   <h4 className="text-xl font-medium mb-2 text-blue-800 dark:text-blue-300">
-                    ECO-USD
+                    EcoCash
                   </h4>
                   <p className="text-blue-700 dark:text-blue-100">
-                    Convert cash to ECO-USD via any ECO-USD agent, then transfer
-                    to your Penny Game account for instant deposits.
+                    Pay from your EcoCash wallet and your balance is credited
+                    once the payment clears — usually within a minute.
                   </p>
                 </div>
 
@@ -372,7 +373,7 @@ export default function About() {
                       <Award size={18} />
                     </div>
                     <div className="text-lg text-blue-700 dark:text-blue-100">
-                      Secure payment methods and fast withdrawals
+                      Deposit by EcoCash or USDT on BNB Smart Chain
                     </div>
                   </div>
                 </div>

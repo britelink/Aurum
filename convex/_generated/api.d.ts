@@ -8,6 +8,11 @@
  * @module
  */
 
+import type {
+  ApiFromModules,
+  FilterApi,
+  FunctionReference,
+} from "convex/server";
 import type * as adminDashboard from "../adminDashboard.js";
 import type * as aurum from "../aurum.js";
 import type * as auth from "../auth.js";
@@ -20,8 +25,8 @@ import type * as chessaReconcile from "../chessaReconcile.js";
 import type * as crons from "../crons.js";
 import type * as cryptoPayoutNode from "../cryptoPayoutNode.js";
 import type * as cryptoWithdrawals from "../cryptoWithdrawals.js";
-import type * as depositWatcherNode from "../depositWatcherNode.js";
 import type * as deposits from "../deposits.js";
+import type * as depositWatcherNode from "../depositWatcherNode.js";
 import type * as ecocashStatusPoll from "../ecocashStatusPoll.js";
 import type * as gameEngine from "../gameEngine.js";
 import type * as gameLib from "../gameLib.js";
@@ -42,12 +47,14 @@ import type * as treasuryTron from "../treasuryTron.js";
 import type * as withdrawable from "../withdrawable.js";
 import type * as withdrawals from "../withdrawals.js";
 
-import type {
-  ApiFromModules,
-  FilterApi,
-  FunctionReference,
-} from "convex/server";
-
+/**
+ * A utility for referencing Convex functions in your app's API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
 declare const fullApi: ApiFromModules<{
   adminDashboard: typeof adminDashboard;
   aurum: typeof aurum;
@@ -61,8 +68,8 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   cryptoPayoutNode: typeof cryptoPayoutNode;
   cryptoWithdrawals: typeof cryptoWithdrawals;
-  depositWatcherNode: typeof depositWatcherNode;
   deposits: typeof deposits;
+  depositWatcherNode: typeof depositWatcherNode;
   ecocashStatusPoll: typeof ecocashStatusPoll;
   gameEngine: typeof gameEngine;
   gameLib: typeof gameLib;
@@ -83,31 +90,11 @@ declare const fullApi: ApiFromModules<{
   withdrawable: typeof withdrawable;
   withdrawals: typeof withdrawals;
 }>;
-
-/**
- * A utility for referencing Convex functions in your app's public API.
- *
- * Usage:
- * ```js
- * const myFunctionReference = api.myModule.myFunction;
- * ```
- */
 export declare const api: FilterApi<
   typeof fullApi,
   FunctionReference<any, "public">
 >;
-
-/**
- * A utility for referencing Convex functions in your app's internal API.
- *
- * Usage:
- * ```js
- * const myFunctionReference = internal.myModule.myFunction;
- * ```
- */
 export declare const internal: FilterApi<
   typeof fullApi,
   FunctionReference<any, "internal">
 >;
-
-export declare const components: {};
