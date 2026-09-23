@@ -67,8 +67,10 @@ export const pollEcocashPayouts = internalAction({
 
       let status: string | null = null;
       try {
-        const res = await client.action(orderStatusRef, { orderId });
-        status = res?.status ?? null;
+        const res = (await ctx.runAction(internal.chessaClient.getOrderStatus, {
+          orderId,
+        })) as { status: string | null };
+        status = res.status;
       } catch (e) {
         // One unreachable order must not stop the rest of the batch; the next
         // tick retries it anyway.

@@ -93,11 +93,11 @@ export const reconcileOrphanOrders = internalAction({
       let status: string | null = null;
       let notFound = false;
       try {
-        const res = await client.action(orderStatusRef, {
+        const res = (await ctx.runAction(internal.chessaClient.getOrderStatus, {
           orderId: row.chessaOrderId,
-        });
-        status = res?.status?.toLowerCase() ?? null;
-        notFound = res?.notFound === true;
+        })) as { status: string | null; notFound: boolean };
+        status = res.status;
+        notFound = res.notFound;
       } catch (e) {
         console.warn(
           `[aurum-rail] reconcile ${row.chessaOrderId}:`,
@@ -126,7 +126,7 @@ export const reconcileOrphanOrders = internalAction({
           continue;
         }
         try {
-          const res = await client.action(refundRef, {
+          const res = await ctx.runAction(internal.chessaClient.requestRefund, {
             orderId: row.chessaOrderId,
             address: refundAddress,
           });

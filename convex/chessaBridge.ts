@@ -142,24 +142,11 @@ export const validateEcocashRecipient = action({
     }
 
     try {
-      const client = new ConvexHttpClient(getChessaConvexUrl());
-      const validateRef = makeFunctionReference<
-        "action",
-        {
-          phone: string;
-          country: string;
-          providerCode: string;
-          payoutMethod: string;
-        },
-        { validated: boolean; name: string | null; error?: string }
-      >("chessa:validateRecipient");
-
-      const res = await client.action(validateRef, {
-        phone,
-        country: "ZW",
-        providerCode: "zw_ecocash",
-        payoutMethod: "mobile_money",
-      });
+      // Our own Chessa credentials, not SGX's bridge.
+      const res = (await ctx.runAction(
+        internal.chessaClient.validateRecipient,
+        { phone, country: "ZW", providerCode: "zw_ecocash" },
+      )) as { validated: boolean; name: string | null };
 
       if (!res?.validated || !res.name) {
         return {
@@ -196,30 +183,11 @@ export const refreshUsdtRate = internalAction({
   args: {},
   handler: async (ctx): Promise<{ usdPerUsdt: number } | null> => {
     try {
-      const client = new ConvexHttpClient(getChessaConvexUrl());
-      const rateRef = makeFunctionReference<
-        "action",
-        { from: string; to: string; amount: number },
-        { rate?: number; fromAmount?: number; toAmount?: number }
-      >("chessa:getRate");
-      const r = await client.action(rateRef, {
+      const r = (await ctx.runAction(internal.chessaClient.getRate, {
         from: "USDT",
         to: "USD",
-        amount: 1,
-      });
-
-      /*
-       * Prefer the amounts over the quoted `rate` field: toAmount/fromAmount is
-       * the conversion that was actually applied, and a provider that changes
-       * how it labels `rate` cannot silently change what we store.
-       */
-      const from = Number(r?.fromAmount);
-      const to = Number(r?.toAmount);
-      const derived =
-        Number.isFinite(from) && from > 0 && Number.isFinite(to) && to > 0
-          ? to / from
-          : Number(r?.rate);
-
+      })) as { rate: number | null };
+      const derived = Number(r?.rate);
       if (!Number.isFinite(derived) || derived <= 0 || derived > 2) return null;
 
       await ctx.runMutation(internal.deposits.setConfig, {
@@ -254,22 +222,12 @@ export const refreshEcocashLimits = internalAction({
   args: {},
   handler: async (ctx): Promise<{ min: number; max: number } | null> => {
     try {
-      const client = new ConvexHttpClient(getChessaConvexUrl());
-      const configRef = makeFunctionReference<
-        "action",
-        Record<string, never>,
-        { payouts?: Array<Record<string, unknown>> }
-      >("chessa:getConfig");
-      const cfg = await client.action(configRef, {});
-
-      const routes = Array.isArray(cfg?.payouts) ? cfg.payouts : [];
-      const zw = routes.find((r) => {
-        const country = r?.country as { code?: string } | undefined;
-        return String(country?.code ?? "").toUpperCase() === "ZW";
-      });
-      const limits = zw?.limits as { min?: number; max?: number } | undefined;
-      const min = Number(limits?.min);
-      const max = Number(limits?.max);
+      const limits = (await ctx.runAction(internal.chessaClient.getLimits, {
+        country: "ZW",
+        providerCode: "zw_ecocash",
+      })) as { min: number | null; max: number | null };
+      const min = Number(limits.min);
+      const max = Number(limits.max);
       if (!Number.isFinite(min) || min <= 0) return null;
 
       await ctx.runMutation(internal.deposits.setConfig, {
@@ -302,38 +260,95 @@ export const runCryptoToEcocashForPayout = internalAction({
     if (!p || p.status !== "queued") return;
 
     try {
-      // `netUsd` is what the recipient was quoted: the gross left the player's
-      // balance, the fee stayed with the house, and Chessa is only ever asked
-      // to deliver the difference. Rows written before withdrawal fees existed
-      // have no `netUsd`, and for those the gross *is* the net.
-      const deliverUsd = p.netUsd ?? p.amountUsd;
       /*
-       * The name is Chessa's to decide, not ours.
+       * Our own Chessa account, not SGX's bridge.
        *
-       * `v0public.cryptoToEcocash` runs its own name-enquiry and replaces
-       * whatever we send with the account's real name, so these two fields are
-       * a required argument whose value is discarded. They are filled from the
-       * name the player was shown and confirmed at quote time; rows predating
-       * that check fall back to their old split-name fields.
+       * This called `v0public.cryptoToEcocash` on SGX, which made every cash-out
+       * depend on their deployment being up, their provider switches pointing
+       * our way and their integration user existing. Penny Game has its own
+       * Chessa credentials; the off-ramp is its own. SGX is used for the EcoCash
+       * on-ramp and nothing else now.
        */
-      const shown = (p.recipientName ?? "").trim();
-      const shownParts = shown ? shown.split(/\s+/) : [];
-      const firstName = shownParts[0] || p.firstName || "Player";
-      const lastName = shownParts.slice(1).join(" ") || p.lastName || "User";
+      const deliverUsd = p.netUsd ?? p.amountUsd;
+      const chain =
+        process.env.PENNY_WITHDRAW_CHAIN?.trim() || "BNB Smart Chain (BEP20)";
+      const originAsset =
+        process.env.PENNY_WITHDRAW_ORIGIN_ASSET?.trim() || "USDT";
 
-      const out = await invokeChessaCryptoToEcocash({
-        firstName,
-        lastName,
-        // E.164. Chessa's formatter passes a number that already carries a
-        // dialling code straight through, so this is the unambiguous form.
-        phone: p.ecocashPhone,
-        intendedUsdAmount: deliverUsd,
-        clientReference: p.idempotencyKey,
-        originAsset: process.env.PENNY_WITHDRAW_ORIGIN_ASSET?.trim() || "USDT",
-        chain:
-          process.env.PENNY_WITHDRAW_CHAIN?.trim() ||
-          "BNB Smart Chain (BEP20)",
-      });
+      // The name the network returns, not one the player typed.
+      const shown = (p.recipientName ?? "").trim();
+      const fallbackName =
+        shown || `${p.firstName ?? "Player"} ${p.lastName ?? "User"}`.trim();
+
+      const recipient = (await ctx.runAction(
+        internal.chessaClient.createRecipient,
+        {
+          phone: p.ecocashPhone,
+          accountName: fallbackName,
+          country: "ZW",
+          providerCode: "zw_ecocash",
+          payoutMethod: "mobile_money",
+        },
+      )) as { recipientId: string; accountName: string };
+
+      /*
+       * Ask for the origin amount that lands `deliverUsd`.
+       *
+       * Chessa prices the order from `originAmount`, so sending the delivered
+       * figure straight through would under-deliver by the rate. Converted at
+       * the cached USD-per-USDT rate; their own quote is authoritative and comes
+       * back on the order, which is what the spend guard below checks.
+       */
+      const rateRow = (await ctx.runQuery(internal.deposits.getConfig, {
+        key: USDT_RATE_KEY,
+      })) as string | null;
+      let usdPerUsdt = FALLBACK_USD_PER_USDT;
+      try {
+        const parsed = rateRow ? JSON.parse(rateRow) : null;
+        if (parsed?.usdPerUsdt > 0) usdPerUsdt = parsed.usdPerUsdt;
+      } catch {
+        /* fallback stands */
+      }
+      const originAmount = usdToUsdt(deliverUsd, usdPerUsdt);
+
+      const order = (await ctx.runAction(internal.chessaClient.createOrder, {
+        recipientId: recipient.recipientId,
+        originAsset,
+        originAmount,
+        destinationAsset: "USD",
+        chain,
+      })) as Record<string, unknown>;
+
+      const chessaOrderId = String(
+        order.id ?? order.orderId ?? (order as { order?: { id?: string } }).order?.id ?? "",
+      );
+      if (!chessaOrderId) {
+        await ctx.runMutation(internal.withdrawals.markPayoutFailed, {
+          payoutId,
+          error: "The payout network did not return an order. Your balance is unchanged.",
+        });
+        return;
+      }
+
+      const funding = (await ctx.runAction(
+        internal.chessaClient.getFundingAddress,
+        { orderId: chessaOrderId, chain },
+      )) as { address: string | null; network: string | null };
+
+      const out = {
+        chessaOrderId,
+        convexOrderId: chessaOrderId,
+        chessaShortId: String(order.shortId ?? order.code ?? chessaOrderId),
+        paymentAddress: funding.address,
+        network: funding.network ?? chain,
+        sendAmount: Number(
+          order.originAmount ?? order.sendAmount ?? originAmount,
+        ),
+        sendCurrency: originAsset,
+        receiveAmount: Number(order.destinationAmount ?? deliverUsd),
+        receiveCurrency: "USD",
+        fee: Number(order.feeAmount ?? order.fee ?? 0),
+      };
 
       const orderId = out.chessaOrderId || out.convexOrderId;
       if (!orderId) {
@@ -427,17 +442,6 @@ export const runCryptoToEcocashForPayout = internalAction({
        * than intended, and would refuse a payout the player had in fact paid
        * for. Convert first.
        */
-      const rateRow = (await ctx.runQuery(internal.deposits.getConfig, {
-        key: USDT_RATE_KEY,
-      })) as string | null;
-      let usdPerUsdt = FALLBACK_USD_PER_USDT;
-      try {
-        const parsed = rateRow ? JSON.parse(rateRow) : null;
-        if (parsed?.usdPerUsdt > 0) usdPerUsdt = parsed.usdPerUsdt;
-      } catch {
-        /* fallback stands */
-      }
-
       const debited = p.amountUsd;
       const debitedUsdt = usdToUsdt(debited, usdPerUsdt);
       const tolerance = Number(
