@@ -301,29 +301,33 @@ export const onrampStatus = internalAction({
       const res = await client.query(statusRef, {});
 
       /*
-       * `available` is not the flag that governs us.
+       * `available` is the right flag again.
        *
-       * SGX reports the on-ramp open when *any* provider is carrying traffic,
-       * and today that is ZB with Pesepay switched off. But
-       * `v0public.ecocashToUsdt` asserts Pesepay specifically and throws before
-       * it reaches a payment, so trusting `available` here offers the player a
-       * route that cannot complete and fails them after they have entered an
-       * amount and a phone number.
+       * This used to key on `res.pesepay` specifically, and that was correct at
+       * the time: `v0public.ecocashToUsdt` asserted Pesepay was open and threw
+       * before reaching a payment, so SGX reporting the on-ramp "available" on
+       * the strength of ZB would have offered a route that could not complete —
+       * failing the player only after they had entered an amount and a phone
+       * number.
        *
-       * So: the provider our call actually needs, when the deployment reports
-       * it. Older deployments do not, and there we fall back to `available`.
+       * SGX has since fixed the fork: the API and their own UI share one
+       * provider selection, ZB first with Pesepay as fallback. So the narrow
+       * check now does the opposite damage, hiding a working route because the
+       * provider it happens to name is switched off. Confirmed live — SGX
+       * reports `zb: true, pesepay: false` and the push works.
+       *
+       * Reading `available` is also the more durable answer: it means "some
+       * provider can carry this", which is the actual question, and it does not
+       * need editing again the next time SGX changes which one.
        */
-      const pesepayKnown = typeof res?.pesepay === "boolean";
-      const usable = pesepayKnown ? res.pesepay === true : Boolean(res?.available);
+      const usable = Boolean(res?.available);
 
       return {
         available: usable,
         known: true,
         message: usable
           ? null
-          : pesepayKnown
-            ? "EcoCash top-ups are paused by the payment provider. Send crypto instead."
-            : (res?.message ?? "EcoCash top-ups are unavailable right now."),
+          : (res?.message ?? "EcoCash top-ups are unavailable right now."),
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
