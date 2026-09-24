@@ -113,10 +113,12 @@ const SECRET = /KEY|SECRET|TOKEN|PASSWORD/i;
 let derivedAgentAddress;
 function deriveAgentAddress() {
   if (derivedAgentAddress !== undefined) return derivedAgentAddress;
+  // Never `PRIVATE_KEY`: that name is SGX's operating treasury key, and a
+  // seeder that picked it up would point this deployment's deposit address and
+  // payout signer at the parent's wallet.
   const key = pick(
     "AURUM_AGENT_PRIVATE_KEY",
     "PENNY_TREASURY_BEP20_PRIVATE_KEY",
-    "PRIVATE_KEY",
   );
   if (!key) return (derivedAgentAddress = null);
   try {
@@ -139,7 +141,7 @@ const PLAN = [
   //      cryptoPayoutNode.ts, railLib.ts) --------------------------------------
   {
     name: "AURUM_AGENT_PRIVATE_KEY",
-    from: () => pick("AURUM_AGENT_PRIVATE_KEY", "PENNY_TREASURY_BEP20_PRIVATE_KEY", "PRIVATE_KEY"),
+    from: () => pick("AURUM_AGENT_PRIVATE_KEY", "PENNY_TREASURY_BEP20_PRIVATE_KEY"),
     required: true,
     why: "Signs payouts AND derives the address deposits are watched on. Without it neither rail runs.",
   },
