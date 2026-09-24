@@ -48,6 +48,15 @@ import {
 } from "../convex/railLib.ts";
 
 import {
+  ecocashProviderOrder,
+  isZbPaid,
+  isZbPushAccepted,
+  isZbTerminalFailure,
+  zbProbeSaysLive,
+  zbReturnUrl,
+} from "../convex/zbLib.ts";
+
+import {
   BETTING_MS,
   HOUSE_RAKE,
   ROUND_MS,
@@ -211,6 +220,97 @@ function drillDeposits() {
 // ---------------------------------------------------------------------------
 // Offline — withdrawals
 // ---------------------------------------------------------------------------
+
+function drillEcocashProviders() {
+  section("Inbound rail — EcoCash provider choice");
+
+  const PESEPAY = { PESEPAY_INTEGRATION_KEY: "k", PESEPAY_ENCRYPTION_KEY: "e" };
+  const ZB = { ZB_API_KEY: "k", ZB_API_SECRET: "s" };
+
+  check(
+    "both configured — Pesepay leads by default",
+    JSON.stringify(ecocashProviderOrder({ ...PESEPAY, ...ZB })) ===
+      JSON.stringify(["pesepay", "zb"]),
+    JSON.stringify(ecocashProviderOrder({ ...PESEPAY, ...ZB })),
+  );
+
+  check(
+    "AURUM_ECOCASH_PROVIDER=zb flips the order",
+    JSON.stringify(
+      ecocashProviderOrder({ ...PESEPAY, ...ZB, AURUM_ECOCASH_PROVIDER: "zb" }),
+    ) === JSON.stringify(["zb", "pesepay"]),
+  );
+
+  // An unconfigured provider must drop out rather than be tried and fail --
+  // otherwise the player waits out a guaranteed refusal before the real push.
+  check(
+    "ZB absent — never attempted",
+    JSON.stringify(ecocashProviderOrder({ ...PESEPAY })) === JSON.stringify(["pesepay"]),
+  );
+  check(
+    "Pesepay absent, ZB preferred — ZB alone",
+    JSON.stringify(
+      ecocashProviderOrder({ ...ZB, AURUM_ECOCASH_PROVIDER: "zb" }),
+    ) === JSON.stringify(["zb"]),
+  );
+  check(
+    "Pesepay absent, ZB present, no preference — still falls through to ZB",
+    JSON.stringify(ecocashProviderOrder({ ...ZB })) === JSON.stringify(["zb"]),
+  );
+  check(
+    "nothing configured — empty, so the quote is refused before a row exists",
+    ecocashProviderOrder({}).length === 0,
+  );
+
+  section("Inbound rail — ZB 500-after-create recovery");
+
+  // The whole reason the probe exists. ZB creates the transaction, prompts the
+  // payer, then fails the response. Treating that as failure both strands the
+  // payment and pushes a second prompt via the fallback.
+  check(
+    "HTTP 500 but a live transaction exists — do NOT fall back",
+    zbProbeSaysLive({ ok: true, reference: "ZB-123", status: "PENDING" }) === true,
+  );
+  check(
+    "HTTP 500 and ZB has no record — safe to fall back",
+    zbProbeSaysLive({ ok: true, reference: null, status: null }) === false,
+  );
+  check(
+    "transaction exists but already FAILED — not recoverable",
+    zbProbeSaysLive({ ok: true, reference: "ZB-123", status: "FAILED" }) === false,
+  );
+  check(
+    "probe itself unreachable — treated as no record, so the fallback is allowed",
+    zbProbeSaysLive({ ok: false, reference: "ZB-123", status: "PENDING" }) === false,
+  );
+
+  for (const dead of ["FAILED", "CANCELLED", "EXPIRED", "DECLINED", "declined"]) {
+    check(`${dead} is terminal`, isZbTerminalFailure(dead));
+  }
+  check("PENDING is not terminal", !isZbTerminalFailure("PENDING"));
+  check("an unknown status is not terminal", !isZbTerminalFailure("WHATEVER"));
+  check("a missing status is not terminal", !isZbTerminalFailure(undefined));
+
+  // Only the literal PAID credits. Anything else left pending costs a stale
+  // screen; anything else guessed as paid invents money.
+  check("PAID credits", isZbPaid("paid") && isZbPaid("PAID"));
+  for (const not of ["PENDING", "SUCCESS", "COMPLETED", "", undefined]) {
+    check(`${not || "(empty)"} does not credit`, !isZbPaid(not));
+  }
+
+  check(
+    "push accepted only on 2xx AND responseCode 00",
+    isZbPushAccepted(true, "00") &&
+      !isZbPushAccepted(false, "00") &&
+      !isZbPushAccepted(true, "01") &&
+      !isZbPushAccepted(true, undefined),
+  );
+
+  // Omitting returnUrl is what made every express-checkout call 500.
+  const ret = zbReturnUrl();
+  check("returnUrl is always sent and absolute", /^https?:\/\/\S+$/.test(ret), ret);
+  check("returnUrl has no double slash before the path", !/[^:]\/\//.test(ret), ret);
+}
 
 function drillWithdrawals() {
   section("Outbound rail — withdrawal pricing");
@@ -675,6 +775,7 @@ async function main() {
   console.log("\nAurum rails — end-to-end drill\n");
 
   drillDeposits();
+  drillEcocashProviders();
   drillWithdrawals();
   drillGame();
 

@@ -28,6 +28,7 @@ import type * as cryptoPayoutNode from "../cryptoPayoutNode.js";
 import type * as cryptoWithdrawals from "../cryptoWithdrawals.js";
 import type * as deposits from "../deposits.js";
 import type * as depositWatcherNode from "../depositWatcherNode.js";
+import type * as ecocashDeposit from "../ecocashDeposit.js";
 import type * as ecocashStatusPoll from "../ecocashStatusPoll.js";
 import type * as gameEngine from "../gameEngine.js";
 import type * as gameLib from "../gameLib.js";
@@ -47,6 +48,9 @@ import type * as treasuryPayout from "../treasuryPayout.js";
 import type * as treasuryTron from "../treasuryTron.js";
 import type * as withdrawable from "../withdrawable.js";
 import type * as withdrawals from "../withdrawals.js";
+import type * as zbDeposit from "../zbDeposit.js";
+import type * as zbLib from "../zbLib.js";
+import type * as zbWebhookHttp from "../zbWebhookHttp.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -72,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   cryptoWithdrawals: typeof cryptoWithdrawals;
   deposits: typeof deposits;
   depositWatcherNode: typeof depositWatcherNode;
+  ecocashDeposit: typeof ecocashDeposit;
   ecocashStatusPoll: typeof ecocashStatusPoll;
   gameEngine: typeof gameEngine;
   gameLib: typeof gameLib;
@@ -91,6 +96,9 @@ declare const fullApi: ApiFromModules<{
   treasuryTron: typeof treasuryTron;
   withdrawable: typeof withdrawable;
   withdrawals: typeof withdrawals;
+  zbDeposit: typeof zbDeposit;
+  zbLib: typeof zbLib;
+  zbWebhookHttp: typeof zbWebhookHttp;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

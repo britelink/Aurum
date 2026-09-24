@@ -29,17 +29,23 @@ export const createEcocashDeposit = internalMutation({
     userId: v.id("users"),
     amount: v.number(),
     phone: v.string(),
+    /**
+     * Which collector we intend to try first. Recorded up front rather than on
+     * success, so a row that dies mid-push still says who was holding it.
+     */
+    provider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
     const amount = roundMoney(args.amount);
     const reference = buildDepositReference();
+    const provider = args.provider ?? "pesepay";
 
     const depositId = await ctx.db.insert("cryptoDeposits", {
       userId: args.userId,
       reference,
       asset: "USD",
-      chain: "EcoCash (Pesepay)",
+      chain: provider === "zb" ? "EcoCash (ZB)" : "EcoCash (Pesepay)",
       amountRequested: amount,
       amountPayable: amount,
       amountReceived: 0,
@@ -47,7 +53,7 @@ export const createEcocashDeposit = internalMutation({
       feePercentAtCreate: 0,
       depositAddress: "ecocash",
       status: "awaiting_ecocash",
-      onrampProvider: "pesepay",
+      onrampProvider: provider,
       onrampPhone: args.phone,
       onrampFiatAmount: amount,
       // 30 minutes: an EcoCash prompt the payer ignores is dead long before
@@ -64,6 +70,52 @@ export const createEcocashDeposit = internalMutation({
 export const getDeposit = internalQuery({
   args: { depositId: v.id("cryptoDeposits") },
   handler: async (ctx, { depositId }) => ctx.db.get(depositId),
+});
+
+/**
+ * Find the open deposit a provider's callback is talking about.
+ *
+ * Scoped to `awaiting_ecocash` deliberately, and not only as an index trick:
+ * a reference that has already been settled must not be re-openable from
+ * outside. The set is tiny — deposits waiting on a live USSD prompt — so
+ * filtering within the status index costs nothing.
+ */
+export const getDepositByOnrampReference = internalQuery({
+  args: { reference: v.string() },
+  handler: async (ctx, { reference }) => {
+    const open = await ctx.db
+      .query("cryptoDeposits")
+      .withIndex("by_status", (q) => q.eq("status", "awaiting_ecocash"))
+      .collect();
+    return open.find((d) => d.onrampReference === reference) ?? null;
+  },
+});
+
+/**
+ * Hand an open deposit to the other collector.
+ *
+ * Used when ZB refuses and we have *confirmed* nothing is in flight there, so
+ * Pesepay can push on the same row. Reusing the row rather than opening a
+ * second one is the point: one intent, one record, one possible credit.
+ */
+export const switchProvider = internalMutation({
+  args: {
+    depositId: v.id("cryptoDeposits"),
+    provider: v.string(),
+    reason: v.string(),
+  },
+  handler: async (ctx, { depositId, provider, reason }) => {
+    const row = await ctx.db.get(depositId);
+    if (!row || row.status !== "awaiting_ecocash") return;
+    await ctx.db.patch(depositId, {
+      onrampProvider: provider,
+      chain: provider === "zb" ? "EcoCash (ZB)" : "EcoCash (Pesepay)",
+      // Kept on the row, not just in logs: "why is this player on Pesepay
+      // today" is a question with an answer, and it is usually the outage.
+      onrampError: `switched from ${row.onrampProvider ?? "unknown"}: ${reason}`.slice(0, 500),
+      updatedAt: Date.now(),
+    });
+  },
 });
 
 export const markPesepayInitiated = internalMutation({

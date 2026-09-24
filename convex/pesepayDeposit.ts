@@ -1,34 +1,35 @@
 "use node";
 
 /**
- * EcoCash deposits, collected by Aurum directly.
+ * EcoCash deposits collected on Aurum's own Pesepay merchant account.
  *
  * Ported from SGX's `pesepaySeamlessInternal.ts` rather than called through it.
- * Aurum is a child product with its own Pesepay merchant credentials, so going
- * via SGX's partner bridge bought nothing and cost everything: the bridge
- * asserts Pesepay is open *on SGX*, and when SGX switched Pesepay off in favour
- * of ZB, Aurum's deposits went dark while our own merchant account was working
- * fine. A dependency that can be turned off by someone solving an unrelated
- * problem is not a dependency worth having for a collection we can make
- * ourselves.
+ * Aurum is a child product with its own Pesepay credentials, so going via SGX's
+ * partner bridge bought nothing and cost everything: the bridge asserts Pesepay
+ * is open *on SGX*, and when SGX switched Pesepay off in favour of ZB, Aurum's
+ * deposits went dark while our own merchant account was working fine. A
+ * dependency that can be turned off by someone solving an unrelated problem is
+ * not a dependency worth having for a collection we can make ourselves.
+ *
+ * This file is now one of two collectors — see `zbDeposit.ts` for the ZB
+ * Smile&Pay express push and `ecocashDeposit.ts` for the router that chooses.
+ * It no longer creates deposit rows; it pushes against one it is handed, so a
+ * failed attempt at one provider can be retried at the other **on the same
+ * row**. Two rows for one intent is how a player pays twice and is credited
+ * once.
  *
  * **This path does not touch the chain**, and that is the one thing to
  * understand about it. A crypto deposit is matched on-chain and backed by USDT
  * in the agent wallet. An EcoCash deposit is USD landing in our Pesepay
  * account, credited on Pesepay's confirmation. Both produce the same balance,
- * but they are backed by two separate floats — and withdrawals draw on the
- * USDT one. See the note on `creditPaidDeposit`.
+ * but they are backed by two separate floats — and withdrawals draw on the USDT
+ * one. See the note on `creditPaidDeposit`.
  */
 
-import { action, internalAction } from "./_generated/server";
+import { internalAction } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
-import { MAX_DEPOSIT, MIN_DEPOSIT, roundMoney } from "./railLib";
-import {
-  isValidZwEcocashNineDigits,
-  toZwEcocashLocalNineDigits,
-} from "./britelinkSgx";
+import type { Doc } from "./_generated/dataModel";
 
 /** Pesepay's code for EcoCash USD. Same constant SGX uses. */
 const ECOCASH_USD_METHOD = "PZW211";
@@ -48,149 +49,84 @@ function credentials(): { integrationKey: string; encryptionKey: string } {
   return { integrationKey, encryptionKey };
 }
 
-/** Is the EcoCash deposit route usable at all? Our own keys, our own answer. */
-export const ecocashDepositStatus = action({
-  args: {},
-  handler: async (): Promise<{ available: boolean; message: string | null }> => {
-    const ok = Boolean(
-      process.env.PESEPAY_INTEGRATION_KEY?.trim() &&
-        process.env.PESEPAY_ENCRYPTION_KEY?.trim(),
-    );
-    return {
-      available: ok,
-      message: ok
-        ? null
-        : "EcoCash deposits are not configured on this deployment yet.",
-    };
-  },
-});
-
 /**
- * Push an EcoCash prompt and wait for it.
+ * Push an EcoCash prompt for a deposit row that already exists.
  *
- * The deposit row is created first and the charge second, so a Pesepay failure
- * leaves a cancelled quote rather than money in flight toward a record that
- * does not exist.
+ * Throws on refusal. Unlike ZB, Pesepay's seamless call does not have a habit
+ * of failing the response after creating the charge, so a thrown error here can
+ * be taken at face value — there is no probe leg to mirror.
  */
-export const startEcocashDeposit = action({
+export const pushPesepayEcocash = internalAction({
   args: {
+    depositId: v.id("cryptoDeposits"),
+    reference: v.string(),
     amount: v.number(),
-    payerPhone: v.string(),
+    phone: v.string(),
     email: v.optional(v.string()),
   },
   handler: async (
     ctx,
     args,
-  ): Promise<{
-    depositId: Id<"cryptoDeposits">;
-    reference: string;
-    pesepayReference: string;
-    amount: number;
-    payerPhone: string;
-    redirectUrl: string | null;
-  }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError("Not authenticated");
-    const userId = identity.subject.split("|")[0] as Id<"users">;
-
+  ): Promise<{ reference: string; redirectUrl: string | null }> => {
     const { integrationKey, encryptionKey } = credentials();
 
-    const amount = roundMoney(args.amount);
-    if (!Number.isFinite(amount) || amount < MIN_DEPOSIT) {
-      throw new ConvexError(`Minimum deposit is $${MIN_DEPOSIT}.`);
-    }
-    if (amount > MAX_DEPOSIT) {
-      throw new ConvexError(`Maximum deposit is $${MAX_DEPOSIT}.`);
-    }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Pesepay } = require("pesepay");
+    const pesepay = new Pesepay(integrationKey, encryptionKey);
+    pesepay.resultUrl = `${process.env.CONVEX_SITE_URL ?? ""}/pesepay/webhook`;
+    pesepay.returnUrl = `${process.env.SITE_URL ?? "https://aurum-nu.vercel.app"}/wallet`;
 
-    const phone = toZwEcocashLocalNineDigits(args.payerPhone);
-    if (!isValidZwEcocashNineDigits(phone)) {
+    const payment = pesepay.createPayment(
+      "USD",
+      ECOCASH_USD_METHOD,
+      args.email?.trim() || "player@pennygame.app",
+      args.phone,
+    );
+
+    const res: {
+      success?: boolean;
+      referenceNumber?: string;
+      merchantReference?: string;
+      redirectUrl?: string;
+      paymentUrl?: string;
+      url?: string;
+      message?: string;
+    } = await pesepay.makeSeamlessPayment(
+      payment,
+      `Penny Game deposit ${args.reference}`,
+      args.amount,
+      { customerPhoneNumber: args.phone, phoneNumber: args.phone },
+    );
+
+    const reference = res?.referenceNumber || res?.merchantReference || null;
+    if (!res?.success || !reference) {
       throw new ConvexError(
-        "Enter a valid Zimbabwe EcoCash number, e.g. 0771234567.",
+        res?.message?.trim() ||
+          "EcoCash declined the payment request. Check the number and try again.",
       );
     }
 
-    const quote = (await ctx.runMutation(
-      internal.pesepayDepositInternal.createEcocashDeposit,
-      { userId, amount, phone },
-    )) as { depositId: Id<"cryptoDeposits">; reference: string };
+    await ctx.runMutation(internal.pesepayDepositInternal.markPesepayInitiated, {
+      depositId: args.depositId,
+      reference,
+      phone: args.phone,
+      amount: args.amount,
+      // Verbatim: Pesepay sees collections with nothing marking them as ours,
+      // and when they ask, the answer has to be a record tying their reference
+      // to our player, amount and timestamp.
+      raw: JSON.stringify({ provider: "pesepay", response: res, at: new Date().toISOString() }),
+    });
 
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { Pesepay } = require("pesepay");
-      const pesepay = new Pesepay(integrationKey, encryptionKey);
-      pesepay.resultUrl = `${process.env.CONVEX_SITE_URL ?? ""}/pesepay/webhook`;
-      pesepay.returnUrl = `${process.env.SITE_URL ?? "https://aurum-nu.vercel.app"}/wallet`;
+    await ctx.scheduler.runAfter(
+      POLL_INTERVAL_MS,
+      internal.pesepayDeposit.pollEcocashDeposit,
+      { depositId: args.depositId, attempt: 1 },
+    );
 
-      const payment = pesepay.createPayment(
-        "USD",
-        ECOCASH_USD_METHOD,
-        args.email?.trim() || identity.email || "player@pennygame.app",
-        phone,
-      );
-
-      const res: {
-        success?: boolean;
-        referenceNumber?: string;
-        merchantReference?: string;
-        redirectUrl?: string;
-        paymentUrl?: string;
-        url?: string;
-        message?: string;
-      } = await pesepay.makeSeamlessPayment(
-        payment,
-        `Penny Game deposit ${quote.reference}`,
-        amount,
-        { customerPhoneNumber: phone, phoneNumber: phone },
-      );
-
-      const reference = res?.referenceNumber || res?.merchantReference || null;
-      if (!res?.success || !reference) {
-        throw new ConvexError(
-          res?.message?.trim() ||
-            "EcoCash declined the payment request. Check the number and try again.",
-        );
-      }
-
-      await ctx.runMutation(
-        internal.pesepayDepositInternal.markPesepayInitiated,
-        {
-          depositId: quote.depositId,
-          reference,
-          phone,
-          amount,
-          // Verbatim: Pesepay sees collections with nothing marking them as
-          // ours, and when they ask, the answer has to be a record tying their
-          // reference to our player, amount and timestamp.
-          raw: JSON.stringify({ response: res, at: new Date().toISOString() }),
-        },
-      );
-
-      await ctx.scheduler.runAfter(
-        POLL_INTERVAL_MS,
-        internal.pesepayDeposit.pollEcocashDeposit,
-        { depositId: quote.depositId, attempt: 1 },
-      );
-
-      return {
-        depositId: quote.depositId,
-        reference: quote.reference,
-        pesepayReference: reference,
-        amount,
-        payerPhone: phone,
-        redirectUrl: res.redirectUrl || res.paymentUrl || res.url || null,
-      };
-    } catch (e) {
-      await ctx.runMutation(internal.pesepayDepositInternal.markPesepayFailed, {
-        depositId: quote.depositId,
-        error: e instanceof Error ? e.message : String(e),
-      });
-      throw e instanceof ConvexError
-        ? e
-        : new ConvexError(
-            `EcoCash deposit could not start: ${e instanceof Error ? e.message : String(e)}`,
-          );
-    }
+    return {
+      reference,
+      redirectUrl: res.redirectUrl || res.paymentUrl || res.url || null,
+    };
   },
 });
 
@@ -211,6 +147,15 @@ export const pollEcocashDeposit = internalAction({
     )) as Doc<"cryptoDeposits"> | null;
 
     if (!row || row.status !== "awaiting_ecocash") return { done: true };
+    /*
+     * The router may have moved this row to the other collector after the
+     * schedule was laid down. Polling Pesepay for a reference that now belongs
+     * to ZB reads as "not paid" forever and would eventually cancel a deposit
+     * ZB is actively collecting.
+     */
+    if (row.onrampProvider && row.onrampProvider !== "pesepay") {
+      return { done: true, reason: "provider changed" };
+    }
     const reference = row.onrampReference;
     if (!reference) return { done: true, reason: "no reference" };
 

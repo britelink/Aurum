@@ -46,8 +46,8 @@ export default function DepositPanel() {
    * dependency that could be turned off by someone solving an unrelated
    * problem.
    */
-  const startEcocashDeposit = useAction(api.pesepayDeposit.startEcocashDeposit);
-  const ecocashStatus = useAction(api.pesepayDeposit.ecocashDepositStatus);
+  const startEcocashDeposit = useAction(api.ecocashDeposit.startEcocashDeposit);
+  const ecocashStatus = useAction(api.ecocashDeposit.ecocashDepositStatus);
 
   /*
    * Ask once, on mount, whether the EcoCash route can actually complete.
