@@ -3,7 +3,7 @@ import { query, mutation, action, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { withdrawableFor } from "./withdrawable";
-import { withdrawalPauseMessage, withdrawalsPaused } from "./railLib";
+import { decideAvailability, readSnapshot } from "./floatGate";
 import {
   formatSgxPartnerApiError,
   getSgxV0BaseUrl,
@@ -247,14 +247,17 @@ export const myBalance = query({
     const user = await ctx.db.get(userId);
     if (!user) return null;
     const allowance = await withdrawableFor(ctx, userId);
+    // Not per-amount: this is the header's "can I cash out at all", and the
+    // exact figure is re-checked against the float when they actually ask.
+    const withdrawGate = decideAvailability(await readSnapshot(ctx as never));
     return {
       userId,
       name: user.name ?? null,
       email: user.email ?? null,
       balance: user.balance ?? 0,
       // Split out so the wallet can show what is cashable and what is winnings.
-      withdrawalsPaused: withdrawalsPaused(),
-      withdrawalPauseMessage: withdrawalsPaused() ? withdrawalPauseMessage() : null,
+      withdrawalsPaused: !withdrawGate.available,
+      withdrawalPauseMessage: withdrawGate.message,
       withdrawable: allowance.withdrawable,
       lockedWinnings: allowance.locked,
       deposited: allowance.deposited,

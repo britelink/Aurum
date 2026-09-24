@@ -1,3 +1,8 @@
+import {
+  UNAVAILABLE_MESSAGE,
+  decideAvailability,
+  readSnapshot,
+} from "./floatGate";
 import { v } from "convex/values";
 import {
   internalMutation,
@@ -18,8 +23,6 @@ import {
   normalizeE164Zimbabwe,
   quoteEcocashPayout,
   roundMoney,
-  withdrawalPauseMessage,
-  withdrawalsPaused,
 } from "./railLib";
 import { withdrawableFor, lockedExplanation } from "./withdrawable";
 
@@ -345,7 +348,13 @@ export async function queueEcocashPayoutFor(
     dryRun?: boolean;
   },
 ) {
-  if (withdrawalsPaused()) throw new Error(withdrawalPauseMessage());
+  /*
+   * Availability is read from the float, not a flag. `needUsdt` is the gross,
+   * so a payout larger than the treasury is refused specifically rather than
+   * the whole rail being shut for everyone.
+   */
+  const gate = decideAvailability(await readSnapshot(ctx as never), args.amount);
+  if (!gate.available) throw new Error(gate.message ?? UNAVAILABLE_MESSAGE);
 
   const amount = roundMoney(args.amount);
   if (amount < MIN_USD) {

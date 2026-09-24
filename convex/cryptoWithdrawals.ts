@@ -10,6 +10,11 @@
  * any terminal failure. A withdrawal that debits and then fails without
  * refunding is the only bug on this rail a player cannot see and cannot undo.
  */
+import {
+  UNAVAILABLE_MESSAGE,
+  decideAvailability,
+  readSnapshot,
+} from "./floatGate";
 import { ConvexError, v } from "convex/values";
 import {
   internalMutation,
@@ -29,8 +34,6 @@ import {
   computeWithdrawFee,
   minEcocashGrossWithFee,
   quoteEcocashPayout,
-  withdrawalPauseMessage,
-  withdrawalsPaused,
   explorerAddressUrl,
   explorerTxUrl,
   isEvmAddress,
@@ -64,9 +67,13 @@ export async function queueCryptoPayoutFor(
     dryRun?: boolean;
   },
 ) {
-  // The real gate. The UI notice is a courtesy; this is what stops a direct
-  // call to the mutation.
-  if (withdrawalsPaused()) throw new ConvexError(withdrawalPauseMessage());
+  /*
+   * The real gate. The UI notice is a courtesy; this is what stops a direct
+   * call to the mutation. Decided by what the treasury holds, so funding it
+   * reopens withdrawals without anyone flipping a switch.
+   */
+  const gate = decideAvailability(await readSnapshot(ctx as never), args.amount);
+  if (!gate.available) throw new ConvexError(gate.message ?? UNAVAILABLE_MESSAGE);
 
   const asset = (args.asset ?? "USDT").trim().toUpperCase();
   if (!isRailAsset(asset)) {
@@ -323,7 +330,7 @@ export const myCryptoPayouts = query({
 export const quoteWithdrawal = query({
   args: { amount: v.number() },
   handler: async (ctx, { amount }) => {
-    const paused = withdrawalsPaused();
+    const paused = !decideAvailability(await readSnapshot(ctx as never)).available;
     // Chessa's live floor when we have it cached, our constant otherwise.
     const minNet = await readEcocashMinNet(ctx);
     const gross = roundMoney(amount);
@@ -366,7 +373,7 @@ export const quoteWithdrawal = query({
       ecocashDelivered: eco?.delivered ?? null,
       ecocashOk: Boolean(eco && eco.delivered >= minNet),
       paused,
-      pauseMessage: paused ? withdrawalPauseMessage() : null,
+      pauseMessage: paused ? UNAVAILABLE_MESSAGE : null,
       withdrawable: allowance?.withdrawable ?? null,
       lockedWinnings: allowance?.locked ?? null,
       overAllowance: allowance ? gross > allowance.withdrawable + 1e-9 : false,

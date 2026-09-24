@@ -38,16 +38,23 @@ export default function DepositPanel() {
   const createDeposit = useMutation(api.deposits.createDeposit);
   const cancelDeposit = useMutation(api.deposits.cancelDeposit);
   /*
-   * Our own Pesepay merchant account, not SGX's partner bridge.
+   * EcoCash through SGX's on-ramp, not collected here.
    *
-   * The bridge asserted Pesepay was open *on SGX*, so when they switched to ZB
-   * our deposits went dark while our own credentials were working fine. Aurum
-   * is a child product with its own keys; collecting directly removes a
-   * dependency that could be turned off by someone solving an unrelated
-   * problem.
+   * Penny holds no crypto float of its own, and that is the whole argument.
+   * Collecting EcoCash directly lands USD in a merchant account and credits a
+   * balance that no token backs — the player can then withdraw against USDT
+   * somebody else deposited. Going through SGX inverts it: SGX takes the fiat,
+   * SGX's treasury sends USDT to our deposit address, and the ordinary chain
+   * watcher credits the player when it arrives. The balance is token-backed by
+   * construction, because nothing is credited until the tokens are actually
+   * here.
+   *
+   * This path was abandoned once before, when SGX's API asserted Pesepay was
+   * open and SGX moved to ZB. That was a forked code path on their side, now
+   * fixed — the API and their own UI share one provider selection.
    */
-  const startEcocashDeposit = useAction(api.ecocashDeposit.startEcocashDeposit);
-  const ecocashStatus = useAction(api.ecocashDeposit.ecocashDepositStatus);
+  const startEcocashDeposit = useAction(api.buyCrypto.topUpWithEcocash);
+  const ecocashStatus = useAction(api.buyCrypto.ecocashTopUpStatus);
 
   /*
    * Ask once, on mount, whether the EcoCash route can actually complete.
@@ -146,8 +153,11 @@ export default function DepositPanel() {
       if (route === "ecocash") {
         const out = await startEcocashDeposit({ amount: n, payerPhone: phone });
         setEcocashRef({
-          reference: out.pesepayReference,
-          fiatAmount: out.amount,
+          reference: out.referenceNumber,
+          // What they actually pay: the credit plus SGX's on-ramp fee. Showing
+          // the credited figure here would understate the prompt they are about
+          // to approve on their phone.
+          fiatAmount: out.fiatAmount,
           phone: out.payerPhone,
         });
       } else {

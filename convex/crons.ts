@@ -86,6 +86,19 @@ crons.interval(
 );
 
 /*
+ * Ten minutes. This is what decides whether withdrawals are open, so the
+ * interval is really "how long after funding the treasury do cash-outs
+ * reopen" -- and, in the other direction, how long a reading may be wrong
+ * before the staleness rule in floatGate closes the gate anyway.
+ */
+crons.interval(
+  "snapshot the payout float",
+  { minutes: 10 },
+  internal.treasuryFloatNode.snapshotFloat,
+  {},
+);
+
+/*
  * Daily, not hourly. Fees accrue slowly, a sweep costs gas, and the whole point
  * of separating it from the payout path was that it may fail quietly for a
  * while without anybody being affected. Frequent sweeps would trade that away
