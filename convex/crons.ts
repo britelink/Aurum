@@ -85,6 +85,19 @@ crons.interval(
   {},
 );
 
+/*
+ * Daily, not hourly. Fees accrue slowly, a sweep costs gas, and the whole point
+ * of separating it from the payout path was that it may fail quietly for a
+ * while without anybody being affected. Frequent sweeps would trade that away
+ * for nothing.
+ */
+crons.interval(
+  "sweep withdrawal fees to the fee wallet",
+  { hours: 24 },
+  internal.feeSweepNode.sweepFees,
+  {},
+);
+
 crons.interval("game heartbeat", { minutes: 5 }, internal.gameEngine.ensureRound, {});
 
 export default crons;

@@ -49,7 +49,7 @@ function parseCsvEnv(name: string): string[] {
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
-async function requireAdmin(ctx: {
+export async function requireAdmin(ctx: {
   auth: { getUserIdentity: () => Promise<{ subject: string } | null> };
   db: { get: (id: Id<"users">) => Promise<unknown> };
 }): Promise<Id<"users">> {

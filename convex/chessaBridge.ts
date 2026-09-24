@@ -333,22 +333,59 @@ export const runCryptoToEcocashForPayout = internalAction({
       const funding = (await ctx.runAction(
         internal.chessaClient.getFundingAddress,
         { orderId: chessaOrderId, chain },
-      )) as { address: string | null; network: string | null };
+      )) as {
+        address: string | null;
+        network: string | null;
+        fundingAmount: number | null;
+        destinationAmount: number | null;
+      };
 
+      /*
+       * Fund what Chessa asks for, not what we predicted it would ask for.
+       *
+       * The funding endpoint states the requirement for this specific order;
+       * the order response is an earlier, looser view of it, and our own
+       * `originAmount` is a prediction of a tariff that belongs to somebody
+       * else. Preferring the demanded figure is what SGX does, and the reason
+       * is that underfunding does not fail loudly: the order sits unfilled,
+       * holding real money, while the player is shown "in progress".
+       *
+       * The fallbacks stay for the case where Chessa names no figure — but the
+       * order of preference matters, and it runs from most authoritative to
+       * least.
+       */
+      const demanded = funding.fundingAmount;
       const out = {
         chessaOrderId,
         convexOrderId: chessaOrderId,
         chessaShortId: String(order.shortId ?? order.code ?? chessaOrderId),
         paymentAddress: funding.address,
         network: funding.network ?? chain,
-        sendAmount: Number(
-          order.originAmount ?? order.sendAmount ?? originAmount,
-        ),
+        sendAmount:
+          demanded ??
+          Number(order.originAmount ?? order.sendAmount ?? originAmount),
         sendCurrency: originAsset,
-        receiveAmount: Number(order.destinationAmount ?? deliverUsd),
+        /*
+         * What the recipient actually gets, where Chessa says so. Our quote is
+         * an estimate; the receipt should carry their number, not ours — but
+         * never one larger than we quoted, because a receipt that grows after
+         * the fact is its own kind of wrong.
+         */
+        receiveAmount:
+          funding.destinationAmount !== null &&
+          funding.destinationAmount <= deliverUsd
+            ? funding.destinationAmount
+            : Number(order.destinationAmount ?? deliverUsd),
         receiveCurrency: "USD",
         fee: Number(order.feeAmount ?? order.fee ?? 0),
       };
+
+      if (demanded !== null) {
+        console.log(
+          `[aurum-rail] payout ${payoutId}: Chessa demands ${demanded} ${originAsset} ` +
+            `for order ${chessaOrderId} (we predicted ${originAmount}).`,
+        );
+      }
 
       const orderId = out.chessaOrderId || out.convexOrderId;
       if (!orderId) {

@@ -60,13 +60,41 @@ export const MAX_DEPOSIT = 10_000;
 export const DEPOSIT_FEE_PERCENT = 0;
 
 /**
- * Outbound fee, in percent of the gross withdrawal.
+ * Outbound fee on a **crypto** withdrawal, in percent of the gross.
  *
- * Deliberately low: the player is taking back their own money, and the only
- * real cost on this side is gas plus (for EcoCash) Chessa's own cut. Override
- * per deployment with `AURUM_WITHDRAW_FEE_PERCENT`.
+ * Two percent. The only real cost on this side is gas — about $0.002 for a
+ * BEP-20 transfer — so almost all of this is margin, and it is set by what is
+ * fair rather than by what it costs. The player is taking back their own money.
+ *
+ * Deliberately lower than the EcoCash rate. Crypto is the cheap rail and should
+ * visibly be the cheap rail: it is the one that works at small sizes, and the
+ * one a player should be nudged toward when they are withdrawing $2.
+ *
+ * Override per deployment with `AURUM_WITHDRAW_FEE_PERCENT`.
  */
-export const DEFAULT_WITHDRAW_FEE_PERCENT = 1.5;
+export const DEFAULT_WITHDRAW_FEE_PERCENT = 2;
+
+/**
+ * Outbound fee on an **EcoCash** withdrawal, in percent of the gross.
+ *
+ * Half a point more than crypto, and it is not arbitrary: an EcoCash payout is
+ * an order placed with a third party, reconciled, polled to completion and
+ * occasionally refunded. That is work crypto does not need, and work that
+ * happens whether or not the payout succeeds.
+ *
+ * Not 3%. SGX charges 3% because SGX moves remittance-sized amounts where three
+ * points is real money. Here the ticket is a few dollars: at $5 the difference
+ * between 2.5% and 3% is two and a half cents, while Chessa's flat cut is $1.10.
+ * Charging the higher number would earn nothing worth having and would make the
+ * headline worse than the parent product's for no gain.
+ *
+ * Override with `AURUM_ECOCASH_FEE_PERCENT`.
+ */
+export const DEFAULT_ECOCASH_FEE_PERCENT = 2.5;
+
+export function ecocashFeePercent(): number {
+  return numberFromEnv("AURUM_ECOCASH_FEE_PERCENT", DEFAULT_ECOCASH_FEE_PERCENT);
+}
 
 /**
  * Floor on the outbound fee, so a dust withdrawal cannot cost the house gas.
@@ -80,6 +108,12 @@ export const DEFAULT_WITHDRAW_FEE_PERCENT = 1.5;
  * a dollar: a penny game whose cheapest withdrawal costs half of itself is one
  * nobody withdraws from, and a fee that large stops being a cost recovery and
  * becomes a reason not to have deposited.
+ *
+ * Left at five cents when the rate went to 2%, having briefly been ten. Ten
+ * looked harmless because it only binds below $5 — but the binding range is
+ * exactly where this game lives, and at the $0.50 minimum it is a 20% fee. The
+ * paragraph above says why that is the wrong direction; doubling the floor was
+ * the same mistake in smaller print.
  */
 export const DEFAULT_WITHDRAW_MIN_FEE_USD = 0.05;
 
@@ -109,23 +143,6 @@ export function ecocashMinNetUsd(): number {
   const raw = process.env.AURUM_ECOCASH_MIN_NET_USD?.trim();
   const n = raw ? Number(raw) : NaN;
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_ECOCASH_MIN_NET_USD;
-}
-
-/**
- * The smallest gross withdrawal whose net clears Chessa's floor.
- *
- * Solved rather than hard-coded, so it stays correct when the fee rate, the fee
- * floor or Chessa's minimum move. Walks up in cents from the floor itself —
- * the answer is always within a few cents, and this cannot drift out of step
- * with `computeWithdrawFee` the way a second formula would.
- */
-export function minEcocashGrossUsd(): number {
-  const target = ecocashMinNetUsd();
-  for (let cents = Math.round(target * 100); cents <= Math.round(target * 100) + 100; cents++) {
-    const gross = cents / 100;
-    if (computeWithdrawFee(gross).net >= target - 1e-9) return gross;
-  }
-  return roundMoney(target * 1.1);
 }
 
 export const EXPLORER_BASE = "https://bscscan.com";
@@ -237,6 +254,8 @@ export function buildPayoutReference(): string {
   return `aurw_${randomId(20)}`;
 }
 
+export type WithdrawRail = "crypto" | "ecocash";
+
 /**
  * Withdrawal fee on a gross amount, honouring the env overrides.
  *
@@ -244,15 +263,27 @@ export function buildPayoutReference(): string {
  * gross and sends the net, so a failed payout refunds one number and the books
  * never have to reason about a partially-charged withdrawal.
  */
-export function computeWithdrawFee(gross: number): {
+export function computeWithdrawFee(
+  gross: number,
+  rail: WithdrawRail = "crypto",
+): {
   gross: number;
   fee: number;
   net: number;
 } {
-  const pct = numberFromEnv(
-    "AURUM_WITHDRAW_FEE_PERCENT",
-    DEFAULT_WITHDRAW_FEE_PERCENT,
-  );
+  /*
+   * The rail decides the rate. Passing it explicitly rather than reading a
+   * single global means a change to the EcoCash price cannot silently reprice
+   * crypto, which is the kind of edit that looks like a one-line tweak and
+   * moves money on a rail nobody was thinking about.
+   */
+  const pct =
+    rail === "ecocash"
+      ? ecocashFeePercent()
+      : numberFromEnv(
+          "AURUM_WITHDRAW_FEE_PERCENT",
+          DEFAULT_WITHDRAW_FEE_PERCENT,
+        );
   const min = numberFromEnv(
     "AURUM_WITHDRAW_MIN_FEE_USD",
     DEFAULT_WITHDRAW_MIN_FEE_USD,
@@ -456,17 +487,62 @@ export function chessaPayoutFeeUsd(): number {
  * sit our fee and Chessa's. Returns null when the gross cannot cover both —
  * which is the honest answer for small amounts, not something to paper over.
  */
+/**
+ * The percentage half of Chessa's tariff.
+ *
+ * Their cost is not flat — it is a percentage **plus** a flat fee, both charged
+ * on top of the amount delivered rather than taken out of it. SGX proved the
+ * shape on a live order: asking for 4.765 produced "they receive 4.75 USD, send
+ * exactly 5.79 USDT", which is `4.765 × 1.005 + 1.00`.
+ *
+ * Modelling this as a flat fee alone is what made our quotes drift. The error
+ * is small on a $5 payout and grows with the amount, so it passes every test
+ * anybody runs by hand and then misprices the withdrawals that matter.
+ *
+ * It is still only ever a **prediction**. The funding endpoint states the real
+ * requirement per order and that is what gets funded — this exists so the
+ * player is shown a number close to the truth before they commit, and so the
+ * spend guard has something sane to compare against.
+ */
+export const DEFAULT_CHESSA_PAYOUT_FEE_PERCENT = 0.5;
+
+export function chessaPayoutFeePercent(): number {
+  return numberFromEnv(
+    "AURUM_CHESSA_PAYOUT_FEE_PERCENT",
+    DEFAULT_CHESSA_PAYOUT_FEE_PERCENT,
+  );
+}
+
 export function quoteEcocashPayout(gross: number): {
   gross: number;
   ourFee: number;
   chessaFee: number;
   delivered: number;
 } | null {
-  const { fee: ourFee } = computeWithdrawFee(gross);
-  const chessaFee = chessaPayoutFeeUsd();
-  const delivered = roundMoney(gross - ourFee - chessaFee);
+  const { fee: ourFee } = computeWithdrawFee(gross, "ecocash");
+  const flat = chessaPayoutFeeUsd();
+  const pct = chessaPayoutFeePercent() / 100;
+
+  /*
+   * Solve for what actually lands, rather than subtracting a guess.
+   *
+   * Chessa charges on top of the delivered amount: funding = delivered × (1+pct)
+   * + flat. What we have to spend is gross − ourFee. Rearranged, that gives the
+   * delivered figure below. Subtracting a percentage from the gross instead —
+   * the obvious way to write this — takes the percentage off the wrong number
+   * and over-promises the player by a little more with every extra dollar.
+   */
+  const spendable = roundMoney(gross - ourFee);
+  const delivered = roundMoney((spendable - flat) / (1 + pct));
   if (delivered <= 0) return null;
-  return { gross: roundMoney(gross), ourFee, chessaFee, delivered };
+
+  return {
+    gross: roundMoney(gross),
+    ourFee,
+    // What Chessa takes, stated as one number the player can read.
+    chessaFee: roundMoney(spendable - delivered),
+    delivered,
+  };
 }
 
 /** Smallest gross that both covers Chessa's fee and clears their floor. */

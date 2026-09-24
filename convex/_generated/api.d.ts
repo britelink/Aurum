@@ -30,6 +30,8 @@ import type * as deposits from "../deposits.js";
 import type * as depositWatcherNode from "../depositWatcherNode.js";
 import type * as ecocashDeposit from "../ecocashDeposit.js";
 import type * as ecocashStatusPoll from "../ecocashStatusPoll.js";
+import type * as fees from "../fees.js";
+import type * as feeSweepNode from "../feeSweepNode.js";
 import type * as gameEngine from "../gameEngine.js";
 import type * as gameLib from "../gameLib.js";
 import type * as http from "../http.js";
@@ -78,6 +80,8 @@ declare const fullApi: ApiFromModules<{
   depositWatcherNode: typeof depositWatcherNode;
   ecocashDeposit: typeof ecocashDeposit;
   ecocashStatusPoll: typeof ecocashStatusPoll;
+  fees: typeof fees;
+  feeSweepNode: typeof feeSweepNode;
   gameEngine: typeof gameEngine;
   gameLib: typeof gameLib;
   http: typeof http;

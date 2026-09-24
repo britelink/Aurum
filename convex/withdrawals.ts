@@ -14,7 +14,6 @@ import {
   chessaPayoutFeeUsd,
   computeWithdrawFee,
   ecocashMinNetUsd,
-  minEcocashGrossUsd,
   minEcocashGrossWithFee,
   normalizeE164Zimbabwe,
   quoteEcocashPayout,

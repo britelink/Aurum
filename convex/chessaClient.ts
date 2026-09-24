@@ -289,22 +289,54 @@ export const getFundingAddress = internalAction({
   handler: async (
     ctx,
     args,
-  ): Promise<{ address: string | null; network: string | null; raw: unknown }> => {
+  ): Promise<{
+    address: string | null;
+    network: string | null;
+    fundingAmount: number | null;
+    destinationAmount: number | null;
+    raw: unknown;
+  }> => {
     const res = await call<{
       address?: string;
       paymentAddress?: string;
       network?: string;
       chain?: string;
-      order?: { cryptoAddress?: string; network?: string };
+      fundingAmount?: number;
+      destinationAmount?: number;
+      order?: {
+        cryptoAddress?: string;
+        network?: string;
+        fundingAmount?: number;
+        destinationAmount?: number;
+      };
     }>(`${API_VERSION}/orders/funding`, {
       method: "POST",
       body: { orderId: args.orderId, chain: chainForChessa(args.chain) },
     });
 
+    const num = (v: unknown): number | null =>
+      typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+
     return {
       address:
         res?.paymentAddress ?? res?.address ?? res?.order?.cryptoAddress ?? null,
       network: res?.network ?? res?.chain ?? res?.order?.network ?? null,
+      /*
+       * What Chessa actually wants, in the asset we are sending.
+       *
+       * This used to be discarded, and the payout funded from our own estimate
+       * instead. That is the wrong way round: Chessa's tariff is theirs to
+       * change, our arithmetic is a prediction of it, and an order underfunded
+       * by a cent does not fail loudly — it sits unfilled, holding real money,
+       * while the player is told the payout is in progress.
+       *
+       * SGX funds the demanded figure verbatim for exactly this reason. So do
+       * we now, still capped at what the player was debited.
+       */
+      fundingAmount: num(res?.fundingAmount) ?? num(res?.order?.fundingAmount),
+      /** Chessa's own statement of what the recipient gets, where it gives one. */
+      destinationAmount:
+        num(res?.destinationAmount) ?? num(res?.order?.destinationAmount),
       raw: res,
     };
   },

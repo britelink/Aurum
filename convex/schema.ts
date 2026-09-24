@@ -366,4 +366,22 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_created", ["userId", "createdAt"])
     .index("by_transaction", ["transactionId"]),
+  /**
+   * Each movement of earned fees out of the float and into the fee wallet.
+   *
+   * A row per attempt, opened before the transfer and closed after, so a sweep
+   * that broadcasts and then loses its answer is visible as `sending` rather
+   * than invisible. `takeable` counts `sending` against the balance too -- an
+   * in-flight sweep has already left, and counting only settled ones would let
+   * a second sweep spend the same surplus.
+   */
+  feeSweeps: defineTable({
+    amountUsdt: v.number(),
+    toAddress: v.string(),
+    status: v.string(), // sending | sent | failed
+    txHash: v.optional(v.string()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_status", ["status"]),
 });
