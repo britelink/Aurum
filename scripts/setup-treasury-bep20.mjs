@@ -38,10 +38,22 @@ function parseEnvFile(filePath) {
 }
 
 const localEnv = parseEnvFile(join(ROOT, ".env.local"));
-const PRIVATE_KEY = localEnv["PRIVATE_KEY"] || process.env.PRIVATE_KEY;
+/*
+ * Penny's own key, never SGX's. This read `PRIVATE_KEY` until that name was
+ * removed from this project -- it is SGX's operating treasury key, and a setup
+ * script that silently picks it up would configure this deployment to sign for
+ * the parent's wallet.
+ */
+const PRIVATE_KEY =
+  localEnv["AURUM_AGENT_PRIVATE_KEY"] ||
+  process.env.AURUM_AGENT_PRIVATE_KEY ||
+  localEnv["PENNY_TREASURY_BEP20_PRIVATE_KEY"] ||
+  process.env.PENNY_TREASURY_BEP20_PRIVATE_KEY;
 
 if (!PRIVATE_KEY) {
-  console.error("ERROR: PRIVATE_KEY not found in .env.local or environment.");
+  console.error(
+    "ERROR: AURUM_AGENT_PRIVATE_KEY not found in .env.local or environment.",
+  );
   process.exit(1);
 }
 

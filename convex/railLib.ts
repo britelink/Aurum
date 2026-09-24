@@ -345,18 +345,25 @@ export function normalizeE164Zimbabwe(raw: string): string {
 }
 
 /**
- * The key the agent wallet signs with, under any of the names in use.
+ * The key the agent wallet signs with.
  *
- * Three names because the deployment inherited env from SGX (`PRIVATE_KEY`) and
- * from the earlier Penny treasury (`PENNY_TREASURY_BEP20_PRIVATE_KEY`). New
- * deployments should set `AURUM_AGENT_PRIVATE_KEY` and nothing else; the
- * fallbacks exist so an existing deployment keeps working without a re-key.
+ * `PRIVATE_KEY` used to be the last fallback here, inherited when this
+ * deployment was seeded from SGX's env. That name is SGX's operating treasury
+ * key — it signs for their reserve wallet, which held about $1,850 the day this
+ * was removed — and it has no business being reachable from a child product.
+ * The fallback was never the intended path, which is exactly the problem: it
+ * would only ever have fired on a deployment where the real key was missing,
+ * so the first time it mattered, Penny would have quietly started paying
+ * players out of SGX's treasury and nothing would have looked wrong.
+ *
+ * `PENNY_TREASURY_BEP20_PRIVATE_KEY` stays: it is this product's own earlier
+ * name for its own wallet, so falling back to it cannot reach somebody else's
+ * money.
  */
 export function agentPrivateKey(): string | undefined {
   return (
     process.env.AURUM_AGENT_PRIVATE_KEY?.trim() ||
     process.env.PENNY_TREASURY_BEP20_PRIVATE_KEY?.trim() ||
-    process.env.PRIVATE_KEY?.trim() ||
     undefined
   );
 }
