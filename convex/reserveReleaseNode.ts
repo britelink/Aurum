@@ -51,11 +51,16 @@ const ERC20_ABI = [
  * than silently self-transferring.
  */
 function reservePrivateKey(): string | undefined {
-  return (
-    process.env.AURUM_RESERVE_PRIVATE_KEY?.trim() ||
-    process.env.PRIVATE_KEY?.trim() ||
-    undefined
-  );
+  /*
+   * No fallback to `PRIVATE_KEY`.
+   *
+   * That was SGX's treasury key, inherited through a shared env. Falling back
+   * to it meant Penny Game could quietly start spending an SGX wallet the
+   * moment its own reserve was unset — which is exactly the coupling this
+   * platform has spent the last while removing. If there is no Penny Game
+   * reserve, there is no reserve.
+   */
+  return process.env.AURUM_RESERVE_PRIVATE_KEY?.trim() || undefined;
 }
 
 export const releaseForEcocashDeposit = internalAction({
@@ -82,9 +87,21 @@ export const releaseForEcocashDeposit = internalAction({
 
     const reserveKey = reservePrivateKey();
     const agentKey = agentPrivateKey();
+
+    /*
+     * No reserve is a configuration, not a failure.
+     *
+     * The reserve existed to move USDT into the float on every EcoCash deposit,
+     * back when that reserve was SGX's wallet. With Penny Game holding its own
+     * float, there is no second wallet to release from: the collected EcoCash
+     * settles from Pesepay into the platform wallet as an operational step, not
+     * a per-deposit transfer.
+     *
+     * So this returns quietly. Writing an error onto the row would flag every
+     * EcoCash deposit as broken for doing exactly what it is meant to do.
+     */
     if (!reserveKey) {
-      await note("No reserve wallet configured (AURUM_RESERVE_PRIVATE_KEY).");
-      return { failed: true };
+      return { skipped: true, reason: "no reserve configured" };
     }
 
     const { ethers } = await import("ethers");
