@@ -202,6 +202,14 @@ export default function About() {
                     Average ROI ranges from 90-120% per successful prediction
                   </span>
                 </li>
+                <li className="text-blue-800 dark:text-blue-100 flex items-start">
+                  <span className="font-semibold mr-2 text-blue-600 dark:text-blue-400 min-w-[20px] inline-block">
+                    5.
+                  </span>
+                  <span>
+                    A one-sided round is voided and every stake is refunded
+                  </span>
+                </li>
               </ol>
             </div>
           </div>

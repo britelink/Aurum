@@ -4,6 +4,7 @@ import { useConvexAuth, useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import RailsPanel from "@/components/admin/RailsPanel";
+import TreasuryPanel from "@/components/admin/TreasuryPanel";
 import LivePanel from "@/components/admin/LivePanel";
 import FinancialsPanel from "@/components/admin/FinancialsPanel";
 import { useCallback, useEffect, useState } from "react";
@@ -166,6 +167,7 @@ export default function AdminPage() {
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
+        <TreasuryPanel />
         <LivePanel />
         <FinancialsPanel />
         <RailsPanel />

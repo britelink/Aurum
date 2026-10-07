@@ -18,18 +18,27 @@
  * staleness rule below is how it is handled.
  */
 
-import { internalQuery } from "./_generated/server";
-import { v } from "convex/values";
+import { internalQuery, query, action } from "./_generated/server";
+import { ConvexError, v } from "convex/values";
 import { roundAmount } from "./railLib";
+import { requireAdmin } from "./adminDashboard";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 
 export const FLOAT_SNAPSHOT_KEY = "treasuryFloat";
 
 /**
- * A BEP-20 transfer is ~60k gas. This is roughly ten of them.
+ * Enough BNB to be confident the next payout can actually broadcast.
  *
- * Deliberately more than one: the gate should close while there is still enough
- * gas to finish the payouts already in flight, not at the moment the next one
- * would fail halfway through.
+ * Measured, not estimated: BSC sits at ~0.05 gwei and a BEP-20 transfer is
+ * ~80k gas, so one payout costs about **0.000004 BNB — a third of a US cent**.
+ * This floor is therefore roughly 125 payouts at today's price.
+ *
+ * That looks absurdly generous and is deliberate. Gas is the cheapest thing in
+ * this system and running out of it is one of the more expensive failures: the
+ * wallet still shows a healthy USDT balance while every send reverts, so it
+ * reads as a broken platform rather than an empty tank. Buying two orders of
+ * magnitude of headroom costs about forty cents.
  */
 export const MIN_GAS_BNB = 0.0005;
 
@@ -157,6 +166,89 @@ export const floatStatus = internalQuery({
       minGasBnb: MIN_GAS_BNB,
       usdt: snapshot ? roundAmount(snapshot.usdt) : null,
       bnb: snapshot ? snapshot.bnb : null,
+    };
+  },
+});
+
+/**
+ * The same reading, for the admin screen.
+ *
+ * A `query` rather than an action on a button, so it is **live**: Convex
+ * re-runs it for every open admin tab the moment the cron writes a new
+ * snapshot. The old float panel made you press "Check" and told you what was
+ * true when you pressed it, which is the wrong shape for the one number that
+ * decides whether players can cash out — you end up believing a figure from
+ * whenever you last looked.
+ *
+ * Says explicitly which wallet is being described. The project has had five
+ * addresses in play across SGX and Penny, and a balance with no address next to
+ * it is how somebody funds the wrong one.
+ */
+export const treasuryStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx as never);
+    const snapshot = await readSnapshot(ctx as never);
+    const decision = decideAvailability(snapshot);
+    const ageMs = snapshot ? Date.now() - snapshot.at : null;
+
+    return {
+      available: decision.available,
+      reason: decision.reason,
+      playerMessage: decision.message,
+
+      /** The wallet every payout is drawn from, and the only one needing gas. */
+      payoutAddress:
+        snapshot?.address ?? process.env.AURUM_DEPOSIT_ADDRESS?.trim() ?? null,
+      /** Receives swept fees. Never sends, so it never needs gas. */
+      feeAddress: process.env.FEESHOLDINGWALLET_ADDRESS?.trim() ?? null,
+
+      usdt: snapshot ? roundAmount(snapshot.usdt) : null,
+      bnb: snapshot ? snapshot.bnb : null,
+      minGasBnb: MIN_GAS_BNB,
+      /** True when gas alone is what is holding payouts shut. */
+      needsGas: snapshot ? snapshot.bnb < MIN_GAS_BNB : null,
+      needsFunds: snapshot ? snapshot.usdt <= 0 : null,
+
+      ageMs,
+      /** A reading this old is treated as no reading at all. */
+      stale: ageMs !== null && ageMs > MAX_SNAPSHOT_AGE_MS,
+      maxAgeMs: MAX_SNAPSHOT_AGE_MS,
+      takenAt: snapshot?.at ?? null,
+    };
+  },
+});
+
+/**
+ * Take a reading now, instead of waiting for the cron.
+ *
+ * For the moment after you fund the wallet, when "it will update within ten
+ * minutes" is a true answer and an unsatisfying one. Does not decide anything
+ * itself -- it writes a snapshot and the same gate reads it, so there is no
+ * second path to being open.
+ */
+export const refreshTreasury = action({
+  args: {},
+  handler: async (ctx): Promise<{ ok: boolean; reason?: string }> => {
+    /*
+     * Admin only. This reads the chain on demand, so leaving it open would let
+     * anyone burn the RPC quota the payout rail depends on — and the quota
+     * running out looks exactly like the treasury being unreachable, which
+     * closes withdrawals.
+     *
+     * Checked through an internal query because an action has no `ctx.db`.
+     */
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new ConvexError("Not authenticated");
+    const userId = identity.subject.split("|")[0] as Id<"users">;
+    const ok = (await ctx.runQuery(internal.aurum.internalIsAdminUser, {
+      userId,
+    })) as boolean;
+    if (!ok) throw new ConvexError("Admin access required");
+
+    return (await ctx.runAction(internal.treasuryFloatNode.snapshotFloat, {})) as {
+      ok: boolean;
+      reason?: string;
     };
   },
 });
