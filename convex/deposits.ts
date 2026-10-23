@@ -613,7 +613,13 @@ function serializeDeposit(row: Doc<"cryptoDeposits">) {
     ecocash: row.onrampProvider
       ? {
           stage: row.onrampStage ?? (row.onrampStatus === "failed" ? "failed" : "awaiting_payment"),
-          reason: row.onrampReason ?? row.onrampError ?? null,
+          // A status-transition log line is bookkeeping, not a reason to show.
+          reason:
+            (row.onrampReason && !/^order status changed/i.test(row.onrampReason)
+              ? row.onrampReason
+              : null) ??
+            row.onrampError ??
+            null,
           fiatAmount: row.onrampFiatAmount ?? null,
           phone: row.onrampPhone ?? null,
           reference: row.onrampReference ?? null,

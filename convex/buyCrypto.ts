@@ -362,7 +362,34 @@ type SgxOnrampOrderStatus =
       provider: string | null;
       paymentMethod: string | null;
       txHash: string | null;
+      steps?: Array<{ at: number; level: string; step: string; message: string }>;
     };
+
+/*
+ * SGX logs every status transition as a warning ("Order status changed in DB:
+ * awaiting_payment → failed"), so its own "last problem" pick tends to land on
+ * the bookkeeping line rather than the cause. Skip those and take the newest
+ * real error, then warning, before falling back to SGX's pick.
+ */
+const BOOKKEEPING = /^order status changed/i;
+
+function onrampReason(
+  res: Extract<SgxOnrampOrderStatus, { found: true }>,
+): string | null {
+  const ended = ["failed", "expired", "cancelled"].includes(res.stage);
+  if (!ended && res.stage !== "sending") return null;
+  const real = [...(res.steps ?? [])]
+    .reverse()
+    .filter((s) => !BOOKKEEPING.test(s.message));
+  const pick =
+    real.find((s) => s.level === "error") ??
+    (ended ? real.find((s) => s.level === "warn") : undefined);
+  if (pick) return pick.message;
+  if (res.reason && !BOOKKEEPING.test(res.reason)) return res.reason;
+  return ended
+    ? "The EcoCash payment was not completed — the prompt was not approved, or the provider did not confirm it."
+    : null;
+}
 
 const onrampOrderStatusRef = makeFunctionReference<
   "action",
@@ -401,11 +428,12 @@ async function checkOnrampOrder(
           depositId,
           found: true,
           stage: res.stage,
-          reason: res.reason,
+          reason: onrampReason(res),
           route:
             [res.provider, res.paymentMethod].filter(Boolean).join(" · ") ||
             null,
           txHash: res.txHash,
+          trace: res.steps?.length ? JSON.stringify(res.steps) : undefined,
         }
       : { depositId, found: false },
   );

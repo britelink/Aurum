@@ -132,6 +132,7 @@ export const recordOnrampStatus = internalMutation({
     reason: v.optional(v.union(v.string(), v.null())),
     route: v.optional(v.union(v.string(), v.null())),
     txHash: v.optional(v.union(v.string(), v.null())),
+    trace: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.depositId);
@@ -155,6 +156,7 @@ export const recordOnrampStatus = internalMutation({
       onrampReason: args.reason?.slice(0, 500) || undefined,
       onrampRoute: args.route || undefined,
       onrampTxHash: args.txHash || undefined,
+      onrampTrace: args.trace?.slice(0, 8000) || undefined,
       onrampCheckedAt: now,
       // Final stages stop the polling; the chain watcher takes it from here.
       ...(FINAL_STAGES.has(stage) ? { onrampStatus: "settled" } : {}),

@@ -220,6 +220,8 @@ export default defineSchema({
     onrampRoute: v.optional(v.string()), // which provider SGX used, e.g. "zb · ecocash"
     onrampTxHash: v.optional(v.string()),
     onrampCheckedAt: v.optional(v.number()),
+    /** SGX's last flow-log steps for the order, JSON. Evidence for support. */
+    onrampTrace: v.optional(v.string()),
     /**
      * The provider's own response, as JSON, kept verbatim.
      *
