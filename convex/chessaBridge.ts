@@ -159,12 +159,16 @@ export const validateEcocashRecipient = action({
       }
       return { validated: true, name: res.name, phone, error: null };
     } catch (e) {
+      // The detail is for the operator; the player gets a sentence, not a
+      // stack trace with our file paths in it.
       const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[aurum-rail] EcoCash name check failed: ${msg}`);
       return {
         validated: false,
         name: null,
         phone,
-        error: `Could not reach EcoCash to check that number: ${msg}`,
+        error:
+          "We couldn't check that number with EcoCash just now. Please try again in a minute.",
       };
     }
   },

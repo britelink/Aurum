@@ -561,6 +561,40 @@ export function minEcocashGrossWithFee(minNet: number): number {
   return roundMoney(minNet + chessaPayoutFeeUsd() + 1);
 }
 
+/**
+ * USDT that has to leave the payout wallet for a cash-out of `gross`.
+ *
+ * Crypto sends the net. EcoCash sends everything after our fee, because
+ * Chessa's flat and percentage fees are paid in the USDT we fund them with.
+ * That is why the wallet can hold more than a player asks for and still be
+ * unable to pay them: a $3 EcoCash cash-out needs ~$2.95 of USDT to deliver $2.
+ */
+export function usdtNeededFor(gross: number, rail: WithdrawRail): number {
+  const { fee, net } = computeWithdrawFee(gross, rail);
+  return rail === "ecocash" ? roundMoney(gross - fee) : net;
+}
+
+/**
+ * The largest gross, in cents, whose payout the wallet can fund.
+ *
+ * Binary search, because the cost only ever rises with the amount and the
+ * float can be thousands of dollars wide.
+ */
+export function maxGrossCoveredBy(
+  floatUsdt: number,
+  rail: WithdrawRail,
+  ceiling: number,
+): number {
+  let lo = 0;
+  let hi = Math.max(0, Math.floor(roundMoney(ceiling) * 100));
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (usdtNeededFor(mid / 100, rail) <= floatUsdt + 1e-9) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo / 100;
+}
+
 
 /**
  * Withdrawals off, deliberately.

@@ -158,7 +158,17 @@ function findRoute(config: ChessaConfig, country: string, providerCode: string) 
     const offersProvider = (method.fields ?? []).some((f) =>
       (f.options ?? []).some((o) => o.id === providerCode),
     );
-    if (offersProvider || method.id === providerCode) {
+    if (offersProvider) {
+      /*
+       * The provider is a choice inside the method's `code` select field, so
+       * the option id *is* the value Chessa expects for `code`. Chessa dropped
+       * `method.code` from mobile-money routes, and reading only that field
+       * turned every EcoCash check into "No payout method for zw_ecocash".
+       */
+      code = method.code ?? providerCode;
+      break;
+    }
+    if (method.id === providerCode) {
       code = method.code;
       break;
     }
@@ -178,25 +188,46 @@ export const validateRecipient = internalAction({
   handler: async (
     ctx,
     args,
-  ): Promise<{ validated: boolean; name: string | null }> => {
+  ): Promise<{ validated: boolean; name: string | null; detail?: string }> => {
     const config = await call<ChessaConfig>("configurations", { method: "GET" });
     const { code } = findRoute(config, args.country, args.providerCode);
 
     try {
       const res = await call<{
-        validation?: { accountName?: string };
+        validation?: { accountName?: string; name?: string };
+        data?: { accountName?: string; name?: string; recipientName?: string };
         accountName?: string;
+        recipientName?: string;
         name?: string;
       }>("recipients/validate", {
         method: "POST",
         body: { code, accountNumber: args.phone },
       });
+      // Their config maps the result as `recipientName <- name`; the other
+      // shapes are ones this endpoint has returned before.
       const name =
-        res?.validation?.accountName ?? res?.accountName ?? res?.name ?? null;
-      return { validated: Boolean(name), name };
-    } catch {
-      // A number the network does not recognise is a normal answer, not a fault.
-      return { validated: false, name: null };
+        res?.name ??
+        res?.validation?.accountName ??
+        res?.validation?.name ??
+        res?.data?.name ??
+        res?.data?.accountName ??
+        res?.data?.recipientName ??
+        res?.accountName ??
+        res?.recipientName ??
+        null;
+      if (!name) {
+        // Kept so a silent "not validated" can be diagnosed from the logs.
+        const detail = `no name in response: ${JSON.stringify(res).slice(0, 400)}`;
+        console.warn(`[aurum-rail] recipient validate: ${detail}`);
+        return { validated: false, name: null, detail };
+      }
+      return { validated: true, name };
+    } catch (e) {
+      // A number the network does not recognise is a normal answer, not a
+      // fault -- but an outage looks identical from the outside, so log it.
+      const detail = e instanceof Error ? e.message : String(e);
+      console.warn(`[aurum-rail] recipient validate failed: ${detail}`);
+      return { validated: false, name: null, detail };
     }
   },
 });

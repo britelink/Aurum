@@ -11,6 +11,7 @@
  * refunding is the only bug on this rail a player cannot see and cannot undo.
  */
 import {
+  MAX_SNAPSHOT_AGE_MS,
   UNAVAILABLE_MESSAGE,
   decideAvailability,
   readSnapshot,
@@ -36,6 +37,7 @@ import {
   quoteEcocashPayout,
   explorerAddressUrl,
   explorerTxUrl,
+  maxGrossCoveredBy,
   isEvmAddress,
   isRailAsset,
   roundMoney,
@@ -377,6 +379,52 @@ export const quoteWithdrawal = query({
       withdrawable: allowance?.withdrawable ?? null,
       lockedWinnings: allowance?.locked ?? null,
       overAllowance: allowance ? gross > allowance.withdrawable + 1e-9 : false,
+    };
+  },
+});
+
+/**
+ * The most this player can cash out right now, by rail, given what the payout
+ * wallet actually holds.
+ *
+ * Withdrawals can be held open over a thin float (AURUM_WITHDRAWALS_FORCE_OPEN),
+ * so "open" no longer means "payable". Without this a player picks an amount,
+ * passes every check, and only learns at the end that it bounced. With it the
+ * form says the figure that works before they commit.
+ *
+ * `null` maxima mean we do not know -- no reading, or one too old to trust --
+ * and the form then says nothing rather than inventing a limit.
+ */
+export const payoutCapacity = query({
+  args: {},
+  handler: async (ctx) => {
+    const snapshot = await readSnapshot(ctx as never);
+    const fresh =
+      snapshot !== null && Date.now() - snapshot.at <= MAX_SNAPSHOT_AGE_MS;
+    const floatUsdt = fresh ? Math.max(0, snapshot.usdt) : null;
+
+    const identity = await ctx.auth.getUserIdentity();
+    const allowance = identity
+      ? await withdrawableFor(
+          ctx,
+          identity.subject.split("|")[0] as Id<"users">,
+        )
+      : null;
+    const withdrawable = allowance?.withdrawable ?? 0;
+    const minNet = await readEcocashMinNet(ctx);
+
+    return {
+      floatUsdt: floatUsdt === null ? null : roundMoney(floatUsdt),
+      cryptoMax:
+        floatUsdt === null
+          ? null
+          : maxGrossCoveredBy(floatUsdt, "crypto", withdrawable),
+      ecocashMax:
+        floatUsdt === null
+          ? null
+          : maxGrossCoveredBy(floatUsdt, "ecocash", withdrawable),
+      cryptoMin: MIN_WITHDRAW_USD,
+      ecocashMin: minEcocashGrossWithFee(minNet),
     };
   },
 });

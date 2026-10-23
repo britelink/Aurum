@@ -65,6 +65,8 @@ export default function WithdrawPanel() {
   const quote = useQuery(api.cryptoWithdrawals.quoteWithdrawal, {
     amount: Number.isFinite(parsed) && parsed > 0 ? parsed : 0,
   });
+  // What the payout wallet can fund right now, per rail. Null = unknown.
+  const capacity = useQuery(api.cryptoWithdrawals.payoutCapacity);
   const balance = me?.balance ?? 0;
   /*
    * Only deposits are cashable while the payout float is uncapitalised.
@@ -177,7 +179,25 @@ export default function WithdrawPanel() {
    */
   const ecocashTooSmall =
     method === "ecocash" && quote?.valid === true && quote.ecocashOk === false;
-  const amountOk = quote?.valid === true && !overBalance && !ecocashTooSmall;
+  /*
+   * Withdrawals can be open while the payout wallet is thin, so an amount that
+   * passes every other check can still be one we cannot fund — and for EcoCash
+   * the fees come out of that same wallet, so it can hold more than the player
+   * asked for and still be short. Say the figure that works, up front.
+   */
+  const railMax =
+    method === "ecocash"
+      ? (capacity?.ecocashMax ?? null)
+      : method === "crypto"
+        ? (capacity?.cryptoMax ?? null)
+        : null;
+  const railMin =
+    method === "ecocash" ? (capacity?.ecocashMin ?? 0) : MIN_WITHDRAW;
+  const floatShort =
+    railMax !== null && quote?.valid === true && parsed > railMax + 1e-9;
+  const railOpen = (max: number | null, min: number) => max === null || max >= min;
+  const amountOk =
+    quote?.valid === true && !overBalance && !ecocashTooSmall && !floatShort;
   const addressOk = /^0x[a-fA-F0-9]{40}$/.test(address.trim());
 
   const check = async () => {
@@ -241,7 +261,13 @@ export default function WithdrawPanel() {
           <Choice
             icon="₮"
             title="Crypto"
-            subtitle="USDT to your own wallet on BNB Chain"
+            subtitle={
+              !railOpen(capacity?.cryptoMax ?? null, MIN_WITHDRAW)
+                ? "USDT on BNB Chain — unavailable right now"
+                : capacity?.cryptoMax != null
+                  ? `USDT on BNB Chain — up to $${capacity.cryptoMax.toFixed(2)} right now`
+                  : "USDT to your own wallet on BNB Chain"
+            }
             onClick={() => {
               setMethod("crypto");
               setStep(1);
@@ -251,9 +277,14 @@ export default function WithdrawPanel() {
             icon="📱"
             title="EcoCash"
             subtitle={
-              quote?.ecocashMinGross
-                ? `Zimbabwe mobile money — from $${quote.ecocashMinGross.toFixed(2)}`
-                : "Zimbabwe mobile money, via Chessa"
+              capacity &&
+              !railOpen(capacity.ecocashMax, capacity.ecocashMin)
+                ? `Zimbabwe mobile money — unavailable right now (from $${capacity.ecocashMin.toFixed(2)})`
+                : capacity?.ecocashMax != null
+                  ? `Zimbabwe mobile money — $${capacity.ecocashMin.toFixed(2)} to $${capacity.ecocashMax.toFixed(2)} right now`
+                  : quote?.ecocashMinGross
+                    ? `Zimbabwe mobile money — from $${quote.ecocashMinGross.toFixed(2)}`
+                    : "Zimbabwe mobile money, via Chessa"
             }
             onClick={() => {
               setMethod("ecocash");
@@ -339,6 +370,42 @@ export default function WithdrawPanel() {
                     {((quote.ecocashMinGross ?? 0) - withdrawable).toFixed(2)}{" "}
                     short. Take it out as crypto instead: no network fee, and
                     the minimum is ${MIN_WITHDRAW.toFixed(2)}.
+                  </p>
+                )}
+              </div>
+            )}
+            {floatShort && !ecocashTooSmall && !overBalance && railMax !== null && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/50 dark:bg-amber-900/20">
+                {railMax >= railMin ? (
+                  <>
+                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                      Right now you can cash out up to{" "}
+                      <strong>${railMax.toFixed(2)}</strong>
+                      {method === "ecocash" ? " by EcoCash" : " as crypto"}.
+                      {method === "ecocash" &&
+                        " Network fees are paid from the same payout wallet, so the limit is lower than what it holds."}{" "}
+                      The rest stays in your balance.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setAmount(railMax.toFixed(2))}
+                      className="mt-2 text-xs font-medium text-amber-900 underline underline-offset-2 dark:text-amber-200"
+                    >
+                      Use ${railMax.toFixed(2)}
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    {method === "ecocash" ? "EcoCash" : "Crypto"} cash-outs
+                    can&apos;t be paid right now — the smallest one is $
+                    {railMin.toFixed(2)} and the payout wallet can&apos;t cover
+                    it yet.
+                    {method === "ecocash" &&
+                    capacity?.cryptoMax != null &&
+                    capacity.cryptoMax >= MIN_WITHDRAW
+                      ? ` You can take up to $${capacity.cryptoMax.toFixed(2)} as crypto instead.`
+                      : ""}{" "}
+                    Your balance is safe and unchanged; try again later.
                   </p>
                 )}
               </div>
