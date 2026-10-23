@@ -53,6 +53,20 @@ crons.interval(
   {},
 );
 
+/*
+ * The other direction: ask SGX what happened to EcoCash top-ups. Without it a
+ * declined prompt, a provider outage and a stuck treasury send all looked like
+ * the same expired deposit. Each top-up also schedules its own early checks, so
+ * this tick only has to catch what those missed; with nothing in flight it is
+ * one indexed read.
+ */
+crons.interval(
+  "poll ecocash top-up status",
+  { minutes: 2 },
+  internal.buyCrypto.pollOnrampOrders,
+  {},
+);
+
 // Chessa's payout floor is theirs to change; follow it rather than shipping a
 // copy that goes stale. Six hours is far more often than a limit moves.
 // A dollar is not a USDT, and the rate moves. Hourly is far more often than it

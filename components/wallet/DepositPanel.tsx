@@ -93,11 +93,6 @@ export default function DepositPanel() {
    * has to say why, where the reader is already looking.
    */
   const [failure, setFailure] = useState<string | null>(null);
-  const [ecocashRef, setEcocashRef] = useState<{
-    reference: string;
-    fiatAmount: number;
-    phone: string;
-  } | null>(null);
 
   if (rail === undefined || open === undefined) return <PanelSpinner />;
 
@@ -110,18 +105,25 @@ export default function DepositPanel() {
     );
   }
 
-  // An EcoCash prompt is out; the player is on their phone, not this screen.
-  if (ecocashRef) {
-    return (
-      <EcocashPending
-        info={ecocashRef}
-        onDone={() => {
-          setEcocashRef(null);
-          setStep(0);
-          setRoute(null);
-        }}
-      />
-    );
+  const cancelOpen = async () => {
+    if (!open) return;
+    try {
+      await cancelDeposit({ depositId: open.id });
+      setStep(0);
+      setRoute(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not cancel");
+    }
+  };
+
+  /*
+   * An EcoCash top-up waiting on SGX. Shown from the live deposit rather than
+   * local state, so a reload still lands here — not on "send exactly X USDT",
+   * which is advice for a crypto deposit the player never started. Once the
+   * chain sees the transfer the ordinary detected/confirming view takes over.
+   */
+  if (open?.ecocash && open.status === "awaiting_payment") {
+    return <EcocashStatus deposit={open} onRetry={cancelOpen} />;
   }
 
   // Money is already in flight toward a quote — that outranks starting another.
@@ -129,15 +131,7 @@ export default function DepositPanel() {
     return (
       <PendingDeposit
         deposit={open}
-        onCancel={async () => {
-          try {
-            await cancelDeposit({ depositId: open.id });
-            setStep(0);
-            setRoute(null);
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Could not cancel");
-          }
-        }}
+        onCancel={cancelOpen}
       />
     );
   }
@@ -151,15 +145,9 @@ export default function DepositPanel() {
     setFailure(null);
     try {
       if (route === "ecocash") {
-        const out = await startEcocashDeposit({ amount: n, payerPhone: phone });
-        setEcocashRef({
-          reference: out.referenceNumber,
-          // What they actually pay: the credit plus SGX's on-ramp fee. Showing
-          // the credited figure here would understate the prompt they are about
-          // to approve on their phone.
-          fiatAmount: out.fiatAmount,
-          phone: out.payerPhone,
-        });
+        // The new deposit arrives through `myOpenDeposit` and the panel switches
+        // to its live EcoCash status on its own.
+        await startEcocashDeposit({ amount: n, payerPhone: phone });
       } else {
         await createDeposit({ amount: n, asset: "USDT" });
       }
@@ -204,6 +192,7 @@ export default function DepositPanel() {
           {ecocashOpen && !ecocashOpen.available && ecocashOpen.message && (
             <p className="text-xs text-slate-500">{ecocashOpen.message}</p>
           )}
+          <EcocashHistory />
         </div>
       )}
 
@@ -341,28 +330,155 @@ export default function DepositPanel() {
 
 // ---------------------------------------------------------------------------
 
-function EcocashPending(props: {
-  info: { reference: string; fiatAmount: number; phone: string };
-  onDone: () => void;
+const ECOCASH_ENDED = new Set(["failed", "expired", "cancelled", "unknown"]);
+
+/**
+ * An EcoCash top-up in flight, as SGX reports it.
+ *
+ * Live: the stage comes from the deposit row, which the poller updates from
+ * SGX's own order status. So the screen moves from "approve the prompt" to
+ * "payment received" to "crediting" by itself, and when it fails it says why
+ * instead of sitting on a spinner until the quote quietly expires.
+ */
+function EcocashStatus(props: {
+  deposit: Deposit;
+  onRetry: () => Promise<void>;
 }) {
+  const d = props.deposit;
+  const e = d.ecocash!;
+  const ended = ECOCASH_ENDED.has(e.stage);
+  const fiat = e.fiatAmount != null ? `$${e.fiatAmount.toFixed(2)}` : "the";
+
+  const { title, body, tone } = ended
+    ? {
+        title: "Top-up didn't go through",
+        body:
+          e.reason ??
+          "The EcoCash payment was not completed. Nothing was taken from your balance.",
+        tone: "bad" as const,
+      }
+    : e.stage === "sending"
+      ? {
+          title: "Payment received",
+          body: "EcoCash cleared. Your USDT is on its way — your balance updates by itself in a minute or two.",
+          tone: "busy" as const,
+        }
+      : e.stage === "delivered"
+        ? {
+            title: "USDT sent",
+            body: "It has left SGX. We credit your balance as soon as the network confirms it.",
+            tone: "busy" as const,
+          }
+        : {
+            title: "Check your phone",
+            body: `Approve the ${fiat} EcoCash prompt${e.phone ? ` on ${e.phone}` : ""}. Your balance updates by itself once it clears — you can close this page.`,
+            tone: "wait" as const,
+          };
+
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-blue-300 bg-blue-50 p-4 dark:border-blue-700/50 dark:bg-blue-900/20">
-        <p className="font-medium text-slate-900 dark:text-slate-100">
-          Check your phone
-        </p>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Approve the ${props.info.fiatAmount.toFixed(2)} EcoCash prompt on{" "}
-          {props.info.phone}. Your balance updates by itself once it clears — you
-          can close this page.
-        </p>
+      <div
+        className={cn(
+          "rounded-xl border p-4",
+          tone === "bad"
+            ? "border-rose-300 bg-rose-50 dark:border-rose-700/50 dark:bg-rose-900/20"
+            : "border-blue-300 bg-blue-50 dark:border-blue-700/50 dark:bg-blue-900/20",
+        )}
+      >
+        <div className="flex items-center gap-2">
+          {tone !== "bad" && (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-slate-400" />
+          )}
+          <p className="font-medium text-slate-900 dark:text-slate-100">{title}</p>
+        </div>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{body}</p>
       </div>
+
       <ReviewCard>
-        <ReviewRow label="Reference" value={props.info.reference} />
+        {e.fiatAmount != null && (
+          <ReviewRow label="EcoCash payment" value={`$${e.fiatAmount.toFixed(2)}`} />
+        )}
+        <ReviewRow label="Will credit" value={`$${d.amountRequested}`} emphasis />
+        {e.reference && <ReviewRow label="Reference" value={e.reference} muted />}
       </ReviewCard>
-      <Button variant="outline" className="w-full" onClick={props.onDone}>
-        Done
-      </Button>
+
+      {e.txUrl && (
+        <a
+          href={e.txUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-1 text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white"
+        >
+          View the USDT transfer <ExternalLink className="h-3 w-3" />
+        </a>
+      )}
+
+      {ended ? (
+        <Button className="w-full" onClick={props.onRetry}>
+          Try again
+        </Button>
+      ) : (
+        <Link href="/play">
+          <Button variant="outline" className="w-full">
+            Back to the table
+          </Button>
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/** Recent EcoCash top-ups and how each ended — the deposit side of "Recent payouts". */
+function EcocashHistory() {
+  const rows = useQuery(api.deposits.myDeposits, { limit: 10 });
+  const ecocash = (rows ?? []).filter((r) => r.ecocash).slice(0, 5);
+  if (ecocash.length === 0) return null;
+
+  return (
+    <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-gray-800">
+      <p className="text-[11px] uppercase tracking-wide text-slate-400">
+        Recent EcoCash top-ups
+      </p>
+      {ecocash.map((r) => {
+        const e = r.ecocash!;
+        const credited = r.status === "confirmed";
+        const ended = !credited && ECOCASH_ENDED.has(e.stage);
+        return (
+          <div key={r.id} className="flex items-start justify-between gap-3 text-sm">
+            <div className="min-w-0">
+              <div className="font-medium text-slate-900 dark:text-slate-100">
+                ${(r.amountCredited ?? r.amountRequested).toFixed(2)} EcoCash
+              </div>
+              <div
+                className={cn("truncate text-xs", ended ? "text-rose-600" : "text-slate-500")}
+                title={ended ? (e.reason ?? undefined) : undefined}
+              >
+                {ended
+                  ? (e.reason ?? "Not completed")
+                  : new Date(r.createdAt).toLocaleString()}
+              </div>
+            </div>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                credited
+                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                  : ended
+                    ? "bg-rose-500/15 text-rose-700 dark:text-rose-300"
+                    : "bg-slate-200 text-slate-600 dark:bg-gray-800 dark:text-slate-300",
+              )}
+            >
+              {credited
+                ? "credited"
+                : ended
+                  ? "failed"
+                  : e.stage === "awaiting_payment"
+                    ? "awaiting approval"
+                    : e.stage.replace(/_/g, " ")}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

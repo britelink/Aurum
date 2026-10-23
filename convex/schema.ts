@@ -205,8 +205,21 @@ export default defineSchema({
     onrampOrderId: v.optional(v.string()),
     onrampFiatAmount: v.optional(v.number()),
     onrampPhone: v.optional(v.string()),
-    onrampStatus: v.optional(v.string()), // initiated | failed
+    onrampStatus: v.optional(v.string()), // initiated | settled | failed
     onrampError: v.optional(v.string()),
+    /**
+     * SGX's own account of the order, polled from `v0public:onrampOrderStatus`.
+     *
+     * Before this the only signal was the coins arriving or not, so a declined
+     * prompt, a provider outage and a stuck treasury send all looked like the
+     * same expired deposit. Stage is SGX's: awaiting_payment | sending |
+     * delivered | failed | expired | cancelled.
+     */
+    onrampStage: v.optional(v.string()),
+    onrampReason: v.optional(v.string()),
+    onrampRoute: v.optional(v.string()), // which provider SGX used, e.g. "zb · ecocash"
+    onrampTxHash: v.optional(v.string()),
+    onrampCheckedAt: v.optional(v.number()),
     /**
      * The provider's own response, as JSON, kept verbatim.
      *
@@ -244,6 +257,8 @@ export default defineSchema({
     .index("by_user_created", ["userId", "createdAt"])
     .index("by_status", ["status"])
     .index("by_tx_hash", ["txHash"])
+    // On-ramp poller: orders SGX has not finished with yet.
+    .index("by_onramp_status", ["onrampStatus", "onrampInitiatedAt"])
     // Watcher lookup: open deposits for one asset, matched on payable amount.
     .index("by_open_amount", ["status", "asset", "amountPayable"]),
 

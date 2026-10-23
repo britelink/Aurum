@@ -87,6 +87,82 @@ export const markOnrampFailed = internalMutation({
   },
 });
 
+/**
+ * How far back the poller looks. Long enough to cover SGX recovering a stuck
+ * order days later (our late-match window is seven days), short enough that an
+ * order SGX never answers for stops costing a call a minute forever.
+ */
+export const ONRAMP_POLL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+const FINAL_STAGES = new Set(["delivered", "failed", "expired", "cancelled"]);
+
+/** On-ramp orders SGX has not finished with, oldest-checked first. */
+export const onrampOrdersToCheck = internalQuery({
+  args: { limit: v.number() },
+  handler: async (ctx, { limit }) => {
+    const since = Date.now() - ONRAMP_POLL_WINDOW_MS;
+    const rows = await ctx.db
+      .query("cryptoDeposits")
+      .withIndex("by_onramp_status", (q) =>
+        q.eq("onrampStatus", "initiated").gte("onrampInitiatedAt", since),
+      )
+      .take(200);
+    return rows
+      .filter((r) => r.onrampOrderId)
+      .sort((a, b) => (a.onrampCheckedAt ?? 0) - (b.onrampCheckedAt ?? 0))
+      .slice(0, limit)
+      .map((r) => ({ depositId: r._id, orderId: r.onrampOrderId as string }));
+  },
+});
+
+/**
+ * Write down what SGX says about an order.
+ *
+ * Records, never decides. The deposit itself is still credited only by the
+ * chain watcher when the USDT lands, so nothing SGX reports here can put money
+ * in a balance. And a failed or expired order does not cancel the deposit: SGX
+ * recovers stuck orders, and a late delivery has to find a quote still inside
+ * the late-match window to be credited.
+ */
+export const recordOnrampStatus = internalMutation({
+  args: {
+    depositId: v.id("cryptoDeposits"),
+    found: v.boolean(),
+    stage: v.optional(v.string()),
+    reason: v.optional(v.union(v.string(), v.null())),
+    route: v.optional(v.union(v.string(), v.null())),
+    txHash: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.depositId);
+    if (!row || row.onrampStatus !== "initiated") return;
+    const now = Date.now();
+
+    if (!args.found) {
+      await ctx.db.patch(args.depositId, {
+        onrampStatus: "settled",
+        onrampStage: "unknown",
+        onrampReason: "SGX has no record of this order.",
+        onrampCheckedAt: now,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    const stage = args.stage ?? "unknown";
+    await ctx.db.patch(args.depositId, {
+      onrampStage: stage,
+      onrampReason: args.reason?.slice(0, 500) || undefined,
+      onrampRoute: args.route || undefined,
+      onrampTxHash: args.txHash || undefined,
+      onrampCheckedAt: now,
+      // Final stages stop the polling; the chain watcher takes it from here.
+      ...(FINAL_STAGES.has(stage) ? { onrampStatus: "settled" } : {}),
+      updatedAt: now,
+    });
+  },
+});
+
 /** The on-ramp details behind a deposit, for the wallet's status panel. */
 export const onrampForDeposit = internalQuery({
   args: { depositId: v.id("cryptoDeposits") },

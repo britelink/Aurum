@@ -21,7 +21,7 @@
  * themselves rather than a game balance.
  */
 
-import { internalAction, action } from "./_generated/server";
+import { internalAction, action, type ActionCtx } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
@@ -186,6 +186,14 @@ export const topUpWithEcocash = action({
         }),
       });
 
+      // The player is approving the prompt now; check back soon rather than at
+      // the next cron tick, so the screen moves when the payment clears.
+      for (const ms of [30_000, 75_000, 150_000]) {
+        await ctx.scheduler.runAfter(ms, internal.buyCrypto.pollOnrampOrders, {
+          depositId: quote.depositId,
+        });
+      }
+
       return {
         depositId: quote.depositId,
         reference: quote.reference,
@@ -342,6 +350,101 @@ export const onrampStatus = internalAction({
         message: `On-ramp unreachable: ${msg}`,
       };
     }
+  },
+});
+
+type SgxOnrampOrderStatus =
+  | { found: false }
+  | {
+      found: true;
+      stage: string;
+      reason: string | null;
+      provider: string | null;
+      paymentMethod: string | null;
+      txHash: string | null;
+    };
+
+const onrampOrderStatusRef = makeFunctionReference<
+  "action",
+  { internalSecret: string; orderId: string },
+  SgxOnrampOrderStatus
+>("v0public:onrampOrderStatus");
+
+/**
+ * Ask SGX about one order and record the answer. Returns false when SGX's
+ * deployment predates the status endpoint, so the caller can stop asking.
+ */
+async function checkOnrampOrder(
+  ctx: ActionCtx,
+  client: ConvexHttpClient,
+  depositId: Id<"cryptoDeposits">,
+  orderId: string,
+): Promise<boolean> {
+  let res: SgxOnrampOrderStatus;
+  try {
+    res = await client.action(onrampOrderStatusRef, {
+      internalSecret: getChessaV0InternalSecret(),
+      orderId,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("Could not find public function")) return false;
+    // One order SGX cannot answer for must not stop the rest being checked.
+    console.warn(`[aurum-rail] onramp status for ${orderId} failed: ${msg}`);
+    return true;
+  }
+
+  await ctx.runMutation(
+    internal.buyCryptoInternal.recordOnrampStatus,
+    res.found
+      ? {
+          depositId,
+          found: true,
+          stage: res.stage,
+          reason: res.reason,
+          route:
+            [res.provider, res.paymentMethod].filter(Boolean).join(" · ") ||
+            null,
+          txHash: res.txHash,
+        }
+      : { depositId, found: false },
+  );
+  return true;
+}
+
+/**
+ * Poll SGX for every on-ramp order still in flight.
+ *
+ * On a cron, and also scheduled shortly after each top-up starts so the player
+ * watching their phone sees "payment received" without waiting for the next
+ * tick. Nothing is credited here — the chain watcher does that when the USDT
+ * lands — this only tells the player, and us, where the order is and why.
+ */
+export const pollOnrampOrders = internalAction({
+  args: { depositId: v.optional(v.id("cryptoDeposits")) },
+  handler: async (ctx, args): Promise<{ checked: number }> => {
+    const due = (await ctx.runQuery(
+      internal.buyCryptoInternal.onrampOrdersToCheck,
+      { limit: 20 },
+    )) as Array<{ depositId: Id<"cryptoDeposits">; orderId: string }>;
+    const targets = args.depositId
+      ? due.filter((d) => d.depositId === args.depositId)
+      : due;
+    if (targets.length === 0) return { checked: 0 };
+
+    const client = new ConvexHttpClient(getChessaConvexUrl());
+    let checked = 0;
+    for (const t of targets) {
+      const supported = await checkOnrampOrder(
+        ctx,
+        client,
+        t.depositId,
+        t.orderId,
+      );
+      if (!supported) break;
+      checked++;
+    }
+    return { checked };
   },
 });
 

@@ -606,6 +606,20 @@ function serializeDeposit(row: Doc<"cryptoDeposits">) {
     confirmations: row.confirmations ?? 0,
     requiredConfirmations: REQUIRED_CONFIRMATIONS,
     claimedAfterExpiry: row.claimedAfterExpiry ?? false,
+    /*
+     * Set for EcoCash top-ups. Such a deposit is waiting on SGX, not on the
+     * player, so the wallet shows SGX's progress instead of "send exactly X".
+     */
+    ecocash: row.onrampProvider
+      ? {
+          stage: row.onrampStage ?? (row.onrampStatus === "failed" ? "failed" : "awaiting_payment"),
+          reason: row.onrampReason ?? row.onrampError ?? null,
+          fiatAmount: row.onrampFiatAmount ?? null,
+          phone: row.onrampPhone ?? null,
+          reference: row.onrampReference ?? null,
+          txUrl: explorerTxUrl(row.onrampTxHash),
+        }
+      : null,
     expiresAt: row.expiresAt,
     paidAt: row.paidAt ?? null,
     createdAt: row.createdAt,
