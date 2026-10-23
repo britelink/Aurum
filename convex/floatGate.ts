@@ -100,6 +100,17 @@ export function decideAvailability(
     };
   }
 
+  /*
+   * Operator override: open regardless of the float. Requested deliberately,
+   * knowing a short wallet means payouts fail. That is survivable because
+   * `sendCryptoPayout` checks the balance before broadcasting and refunds on
+   * failure, so a player sees a bounced cash-out, never lost money. The kill
+   * switch above still wins.
+   */
+  if (process.env.AURUM_WITHDRAWALS_FORCE_OPEN?.trim() === "true") {
+    return { available: true, message: null, reason: "ok", snapshot };
+  }
+
   if (!snapshot) {
     return { available: false, message: UNAVAILABLE_MESSAGE, reason: "no_reading", snapshot };
   }
