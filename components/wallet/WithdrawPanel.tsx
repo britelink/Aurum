@@ -35,6 +35,12 @@ const STEPS = ["Destination", "Details", "Confirm"];
 /** Mirrors MIN_WITHDRAW_USD in convex/railLib.ts. */
 const MIN_WITHDRAW = 0.5;
 
+function limitsLine(l: { min: number; max: number; open: boolean }): string {
+  return l.open
+    ? `Min $${l.min.toFixed(2)} · Max $${l.max.toFixed(2)}`
+    : `Not available right now · Min $${l.min.toFixed(2)}`;
+}
+
 function newIdempotencyKey(): string {
   return `aurw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -171,33 +177,40 @@ export default function WithdrawPanel() {
     );
   }
 
-  const overBalance = parsed > withdrawable;
   /*
-   * Chessa refuses an EcoCash payout under $2 *received*, and the refusal comes
-   * back as a bare 400 after the debit. Checked here so the player is told the
-   * number before they commit, not refunded with a request id afterwards.
+   * Three numbers per rail: the minimum, the maximum, the fee. The maximum is
+   * the lower of what the player may withdraw and what the payout wallet can
+   * fund — for EcoCash the network fees come out of that same wallet, so it can
+   * hold more than the player asks for and still be short.
    */
-  const ecocashTooSmall =
-    method === "ecocash" && quote?.valid === true && quote.ecocashOk === false;
-  /*
-   * Withdrawals can be open while the payout wallet is thin, so an amount that
-   * passes every other check can still be one we cannot fund — and for EcoCash
-   * the fees come out of that same wallet, so it can hold more than the player
-   * asked for and still be short. Say the figure that works, up front.
-   */
-  const railMax =
-    method === "ecocash"
-      ? (capacity?.ecocashMax ?? null)
-      : method === "crypto"
-        ? (capacity?.cryptoMax ?? null)
-        : null;
-  const railMin =
-    method === "ecocash" ? (capacity?.ecocashMin ?? 0) : MIN_WITHDRAW;
-  const floatShort =
-    railMax !== null && quote?.valid === true && parsed > railMax + 1e-9;
-  const railOpen = (max: number | null, min: number) => max === null || max >= min;
+  const limitsFor = (rail: Method) => {
+    const min =
+      rail === "ecocash"
+        ? (capacity?.ecocashMin ?? quote?.ecocashMinGross ?? MIN_WITHDRAW)
+        : MIN_WITHDRAW;
+    const floatMax =
+      rail === "ecocash" ? capacity?.ecocashMax : capacity?.cryptoMax;
+    const max = Math.min(withdrawable, floatMax ?? withdrawable);
+    return { min, max, open: max >= min };
+  };
+  const limits = limitsFor(method ?? "crypto");
+  const belowMin = parsed > 0 && parsed < limits.min - 1e-9;
+  const aboveMax = parsed > limits.max + 1e-9;
+  // Everything the player pays, ours and the network's, as one figure.
+  const feeQuote =
+    quote?.valid === true
+      ? method === "ecocash"
+        ? quote.ecocashDelivered != null
+          ? { fee: quote.gross - quote.ecocashDelivered, receive: quote.ecocashDelivered }
+          : null
+        : { fee: quote.fee, receive: quote.net }
+      : null;
   const amountOk =
-    quote?.valid === true && !overBalance && !ecocashTooSmall && !floatShort;
+    quote?.valid === true &&
+    limits.open &&
+    !belowMin &&
+    !aboveMax &&
+    !(method === "ecocash" && quote.ecocashOk === false);
   const addressOk = /^0x[a-fA-F0-9]{40}$/.test(address.trim());
 
   const check = async () => {
@@ -261,13 +274,7 @@ export default function WithdrawPanel() {
           <Choice
             icon="₮"
             title="Crypto"
-            subtitle={
-              !railOpen(capacity?.cryptoMax ?? null, MIN_WITHDRAW)
-                ? "USDT on BNB Chain — unavailable right now"
-                : capacity?.cryptoMax != null
-                  ? `USDT on BNB Chain — up to $${capacity.cryptoMax.toFixed(2)} right now`
-                  : "USDT to your own wallet on BNB Chain"
-            }
+            subtitle={`USDT on BNB Chain · ${limitsLine(limitsFor("crypto"))}`}
             onClick={() => {
               setMethod("crypto");
               setStep(1);
@@ -276,16 +283,7 @@ export default function WithdrawPanel() {
           <Choice
             icon="📱"
             title="EcoCash"
-            subtitle={
-              capacity &&
-              !railOpen(capacity.ecocashMax, capacity.ecocashMin)
-                ? `Zimbabwe mobile money — unavailable right now (from $${capacity.ecocashMin.toFixed(2)})`
-                : capacity?.ecocashMax != null
-                  ? `Zimbabwe mobile money — $${capacity.ecocashMin.toFixed(2)} to $${capacity.ecocashMax.toFixed(2)} right now`
-                  : quote?.ecocashMinGross
-                    ? `Zimbabwe mobile money — from $${quote.ecocashMinGross.toFixed(2)}`
-                    : "Zimbabwe mobile money, via Chessa"
-            }
+            subtitle={`Zimbabwe mobile money · ${limitsLine(limitsFor("ecocash"))}`}
             onClick={() => {
               setMethod("ecocash");
               setStep(1);
@@ -309,13 +307,15 @@ export default function WithdrawPanel() {
           <div className="space-y-2">
             <div className="flex items-baseline justify-between">
               <Label htmlFor="withdraw-amount">How much?</Label>
-              <button
-                type="button"
-                onClick={() => setAmount(withdrawable.toFixed(2))}
-                className="text-xs text-slate-500 underline-offset-2 hover:underline"
-              >
-                All ${withdrawable.toFixed(2)}
-              </button>
+              {limits.open && (
+                <button
+                  type="button"
+                  onClick={() => setAmount(limits.max.toFixed(2))}
+                  className="text-xs text-slate-500 underline-offset-2 hover:underline"
+                >
+                  Max ${limits.max.toFixed(2)}
+                </button>
+              )}
             </div>
             <div className="relative">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -328,88 +328,62 @@ export default function WithdrawPanel() {
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className={cn("pl-7 text-lg", overBalance && "border-rose-400")}
+                className={cn(
+                  "pl-7 text-lg",
+                  (belowMin || aboveMax) && "border-rose-400",
+                )}
               />
             </div>
-            {overBalance && (
-              <p className="text-xs text-rose-600">
-                {lockedWinnings > 0
-                  ? `You can withdraw up to $${withdrawable.toFixed(2)} — your deposits. The other $${lockedWinnings.toFixed(2)} is winnings, not cashable yet.`
-                  : "That is more than your balance."}
-              </p>
-            )}
-            {quote?.valid === false && quote.message && !overBalance && (
-              <p className="text-xs text-slate-500">{quote.message}</p>
-            )}
-            {/*
-              Say the number, and whether they have it. "Too small" without the
-              figure that works just moves the guessing to the player.
-            */}
-            {ecocashTooSmall && quote?.valid && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/50 dark:bg-amber-900/20">
-                <p className="text-xs text-amber-800 dark:text-amber-300">
-                  EcoCash needs at least{" "}
-                  <strong>${quote.ecocashMinGross?.toFixed(2)}</strong> — it
-                  carries a ${quote.ecocashFee?.toFixed(2)} network fee on top of
-                  ours, and pays out from $
-                  {quote.ecocashMinNet?.toFixed(2)} received.
-                </p>
-                {(quote.ecocashMinGross ?? 0) <= withdrawable ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setAmount((quote.ecocashMinGross ?? 0).toFixed(2))
-                    }
-                    className="mt-2 text-xs font-medium text-amber-900 underline underline-offset-2 dark:text-amber-200"
-                  >
-                    Use ${quote.ecocashMinGross?.toFixed(2)}
-                  </button>
-                ) : (
-                  <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
-                    You have ${withdrawable.toFixed(2)} — $
-                    {((quote.ecocashMinGross ?? 0) - withdrawable).toFixed(2)}{" "}
-                    short. Take it out as crypto instead: no network fee, and
-                    the minimum is ${MIN_WITHDRAW.toFixed(2)}.
-                  </p>
-                )}
+
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Minimum</span>
+                <span
+                  className={cn(
+                    "font-mono",
+                    belowMin ? "text-rose-600" : "text-slate-700 dark:text-slate-300",
+                  )}
+                >
+                  ${limits.min.toFixed(2)}
+                </span>
               </div>
-            )}
-            {floatShort && !ecocashTooSmall && !overBalance && railMax !== null && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/50 dark:bg-amber-900/20">
-                {railMax >= railMin ? (
-                  <>
-                    <p className="text-xs text-amber-800 dark:text-amber-300">
-                      Right now you can cash out up to{" "}
-                      <strong>${railMax.toFixed(2)}</strong>
-                      {method === "ecocash" ? " by EcoCash" : " as crypto"}.
-                      {method === "ecocash" &&
-                        " Network fees are paid from the same payout wallet, so the limit is lower than what it holds."}{" "}
-                      The rest stays in your balance.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setAmount(railMax.toFixed(2))}
-                      className="mt-2 text-xs font-medium text-amber-900 underline underline-offset-2 dark:text-amber-200"
-                    >
-                      Use ${railMax.toFixed(2)}
-                    </button>
-                  </>
-                ) : (
-                  <p className="text-xs text-amber-800 dark:text-amber-300">
-                    {method === "ecocash" ? "EcoCash" : "Crypto"} cash-outs
-                    can&apos;t be paid right now — the smallest one is $
-                    {railMin.toFixed(2)} and the payout wallet can&apos;t cover
-                    it yet.
-                    {method === "ecocash" &&
-                    capacity?.cryptoMax != null &&
-                    capacity.cryptoMax >= MIN_WITHDRAW
-                      ? ` You can take up to $${capacity.cryptoMax.toFixed(2)} as crypto instead.`
-                      : ""}{" "}
-                    Your balance is safe and unchanged; try again later.
-                  </p>
-                )}
+              <div className="flex justify-between">
+                <span className="text-slate-500">Maximum</span>
+                <span
+                  className={cn(
+                    "font-mono",
+                    aboveMax || !limits.open
+                      ? "text-rose-600"
+                      : "text-slate-700 dark:text-slate-300",
+                  )}
+                >
+                  ${limits.max.toFixed(2)}
+                </span>
               </div>
-            )}
+              {feeQuote && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Withdrawal fee</span>
+                    <span className="font-mono text-slate-700 dark:text-slate-300">
+                      ${feeQuote.fee.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">
+                      {method === "crypto" ? "You receive" : "They receive"}
+                    </span>
+                    <span className="font-mono font-medium text-slate-900 dark:text-slate-100">
+                      {method === "crypto"
+                        ? `${feeQuote.receive.toFixed(2)} USDT`
+                        : `$${feeQuote.receive.toFixed(2)}`}
+                    </span>
+                  </div>
+                </>
+              )}
+              {!limits.open && (
+                <p className="pt-1 text-rose-600">Not available right now.</p>
+              )}
+            </div>
           </div>
 
           {method === "crypto" ? (
@@ -506,15 +480,11 @@ export default function WithdrawPanel() {
               }
             />
             <ReviewRow label="Leaving your balance" value={`$${quote.gross.toFixed(2)}`} />
-            <ReviewRow label="Our fee" value={`$${quote.fee.toFixed(2)}`} />
-            {/* Chessa's fee is real money the player pays; showing only ours
-                would be quoting two thirds of the price. */}
-            {method === "ecocash" && (
-              <ReviewRow
-                label="EcoCash network fee"
-                value={`$${(quote.ecocashFee ?? 0).toFixed(2)}`}
-              />
-            )}
+            {/* Ours and the network's together — the whole price, once. */}
+            <ReviewRow
+              label="Withdrawal fee"
+              value={`$${(feeQuote?.fee ?? quote.fee).toFixed(2)}`}
+            />
             <ReviewRow
               label={method === "crypto" ? "You receive" : "They receive"}
               value={
