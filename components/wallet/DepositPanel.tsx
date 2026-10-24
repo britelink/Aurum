@@ -349,18 +349,25 @@ function EcocashStatus(props: {
   const ended = ECOCASH_ENDED.has(e.stage);
   const fiat = e.fiatAmount != null ? `$${e.fiatAmount.toFixed(2)}` : "the";
 
-  const { title, body, tone } = ended
+  // Charged but not delivered: never offer a retry that would charge again.
+  const paidStuck = ended && e.paid;
+
+  const { title, body, tone } = paidStuck
+    ? {
+        title: "Payment received — transfer delayed",
+        body: e.reason ?? "Your EcoCash payment was received. Keep the reference below.",
+        tone: "held" as const,
+      }
+    : ended
     ? {
         title: "Top-up didn't go through",
-        body:
-          e.reason ??
-          "The EcoCash payment was not completed. Nothing was taken from your balance.",
+        body: e.reason ?? "The EcoCash payment didn't go through.",
         tone: "bad" as const,
       }
     : e.stage === "sending"
       ? {
           title: "Payment received",
-          body: "EcoCash cleared. Your USDT is on its way — your balance updates by itself in a minute or two.",
+          body: "EcoCash cleared and your USDT is being sent. Your balance updates by itself once it lands — you can close this page.",
           tone: "busy" as const,
         }
       : e.stage === "delivered"
@@ -382,11 +389,13 @@ function EcocashStatus(props: {
           "rounded-xl border p-4",
           tone === "bad"
             ? "border-rose-300 bg-rose-50 dark:border-rose-700/50 dark:bg-rose-900/20"
-            : "border-blue-300 bg-blue-50 dark:border-blue-700/50 dark:bg-blue-900/20",
+            : tone === "held"
+              ? "border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-900/20"
+              : "border-blue-300 bg-blue-50 dark:border-blue-700/50 dark:bg-blue-900/20",
         )}
       >
         <div className="flex items-center gap-2">
-          {tone !== "bad" && (
+          {tone !== "bad" && tone !== "held" && (
             <Loader2 className="h-4 w-4 shrink-0 animate-spin text-slate-400" />
           )}
           <p className="font-medium text-slate-900 dark:text-slate-100">{title}</p>
@@ -413,7 +422,7 @@ function EcocashStatus(props: {
         </a>
       )}
 
-      {ended ? (
+      {ended && !paidStuck ? (
         <Button className="w-full" onClick={props.onRetry}>
           Try again
         </Button>
@@ -442,7 +451,8 @@ function EcocashHistory() {
       {ecocash.map((r) => {
         const e = r.ecocash!;
         const credited = r.status === "confirmed";
-        const ended = !credited && ECOCASH_ENDED.has(e.stage);
+        const delayed = !credited && ECOCASH_ENDED.has(e.stage) && e.paid;
+        const ended = !credited && !delayed && ECOCASH_ENDED.has(e.stage);
         return (
           <div key={r.id} className="flex items-start justify-between gap-3 text-sm">
             <div className="min-w-0">
@@ -465,12 +475,16 @@ function EcocashHistory() {
                   ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
                   : ended
                     ? "bg-rose-500/15 text-rose-700 dark:text-rose-300"
-                    : "bg-slate-200 text-slate-600 dark:bg-gray-800 dark:text-slate-300",
+                    : delayed
+                      ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                      : "bg-slate-200 text-slate-600 dark:bg-gray-800 dark:text-slate-300",
               )}
             >
               {credited
                 ? "credited"
-                : ended
+                : delayed
+                  ? "paid · delayed"
+                  : ended
                   ? "failed"
                   : e.stage === "awaiting_payment"
                     ? "awaiting approval"

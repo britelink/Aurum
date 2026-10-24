@@ -578,6 +578,49 @@ export const expireStale = internalMutation({
 // Reads for the wallet UI
 // ---------------------------------------------------------------------------
 
+/*
+ * What to tell a player about an EcoCash top-up that has stopped.
+ *
+ * Never the raw reason: SGX's log lines are stack traces and contract reverts,
+ * which read to a player as "the platform is broken". The raw text stays in
+ * `onrampReason`/`onrampTrace` for support.
+ *
+ * And the one distinction that matters: was their EcoCash charged? SGX logs
+ * the provider confirming payment before it tries to send USDT, so a failure
+ * after that point means the money left their phone. Offering "Try again" then
+ * would charge them twice.
+ */
+const PAID_MARKERS = /CLAIM_WON|reports PAID|Payment confirmed|returned to processing/i;
+
+function ecocashOutcome(row: Doc<"cryptoDeposits">): {
+  paid: boolean;
+  reason: string | null;
+} {
+  const raw = `${row.onrampTrace ?? ""} ${row.onrampReason ?? ""}`;
+  const paid = PAID_MARKERS.test(raw) || /exceeds balance|sendTokens|Blockchain/i.test(raw);
+  const stage = row.onrampStage;
+  if (stage === "expired") {
+    return {
+      paid,
+      reason: paid
+        ? "Your EcoCash payment was received, but the transfer to your balance did not complete. It will be sorted out — keep the reference below."
+        : "The EcoCash prompt wasn't approved in time, so nothing was charged.",
+    };
+  }
+  if (stage === "failed" || stage === "cancelled" || stage === "unknown") {
+    return {
+      paid,
+      reason: paid
+        ? "Your EcoCash payment was received, but the transfer to your balance did not complete. It will be sorted out — keep the reference below."
+        : "The EcoCash payment didn't go through.",
+    };
+  }
+  if (row.onrampStatus === "failed") {
+    return { paid: false, reason: "EcoCash top-up could not start. Nothing was charged." };
+  }
+  return { paid, reason: null };
+}
+
 function serializeDeposit(row: Doc<"cryptoDeposits">) {
   return {
     id: row._id,
@@ -613,13 +656,7 @@ function serializeDeposit(row: Doc<"cryptoDeposits">) {
     ecocash: row.onrampProvider
       ? {
           stage: row.onrampStage ?? (row.onrampStatus === "failed" ? "failed" : "awaiting_payment"),
-          // A status-transition log line is bookkeeping, not a reason to show.
-          reason:
-            (row.onrampReason && !/^order status changed/i.test(row.onrampReason)
-              ? row.onrampReason
-              : null) ??
-            row.onrampError ??
-            null,
+          ...ecocashOutcome(row),
           fiatAmount: row.onrampFiatAmount ?? null,
           phone: row.onrampPhone ?? null,
           reference: row.onrampReference ?? null,
