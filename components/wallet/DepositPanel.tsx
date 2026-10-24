@@ -364,6 +364,14 @@ function EcocashStatus(props: {
         body: e.reason ?? "The EcoCash payment didn't go through.",
         tone: "bad" as const,
       }
+    : e.stage === "delayed"
+    ? {
+        title: "Payment received — on its way soon",
+        body:
+          e.reason ??
+          "Your EcoCash payment was received. Delivery is waiting for the liquidity pool to be refilled — you'll be credited automatically.",
+        tone: "held" as const,
+      }
     : e.stage === "sending"
       ? {
           title: "Payment received",
@@ -451,7 +459,9 @@ function EcocashHistory() {
       {ecocash.map((r) => {
         const e = r.ecocash!;
         const credited = r.status === "confirmed";
-        const delayed = !credited && ECOCASH_ENDED.has(e.stage) && e.paid;
+        const delayed =
+          !credited &&
+          (e.stage === "delayed" || (ECOCASH_ENDED.has(e.stage) && e.paid));
         const ended = !credited && !delayed && ECOCASH_ENDED.has(e.stage);
         return (
           <div key={r.id} className="flex items-start justify-between gap-3 text-sm">

@@ -94,13 +94,22 @@ export const markOnrampFailed = internalMutation({
  */
 export const ONRAMP_POLL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
-const FINAL_STAGES = new Set(["delivered", "failed", "expired", "cancelled"]);
+/*
+ * Only these end the polling. "failed" and "expired" do not: SGX retries a
+ * paid order whose send stalled, and has recovered orders it once reported as
+ * failed — so those keep being asked about, just less often, until the poll
+ * window closes. A player whose top-up comes good later then sees it move.
+ */
+const FINAL_STAGES = new Set(["delivered", "cancelled"]);
+const ENDED_STAGES = new Set(["failed", "expired", "unknown"]);
+const ENDED_RECHECK_MS = 30 * 60 * 1000;
 
 /** On-ramp orders SGX has not finished with, oldest-checked first. */
 export const onrampOrdersToCheck = internalQuery({
   args: { limit: v.number() },
   handler: async (ctx, { limit }) => {
-    const since = Date.now() - ONRAMP_POLL_WINDOW_MS;
+    const now = Date.now();
+    const since = now - ONRAMP_POLL_WINDOW_MS;
     const rows = await ctx.db
       .query("cryptoDeposits")
       .withIndex("by_onramp_status", (q) =>
@@ -109,6 +118,13 @@ export const onrampOrdersToCheck = internalQuery({
       .take(200);
     return rows
       .filter((r) => r.onrampOrderId)
+      // Credited already: the watcher settled it, SGX has nothing to add.
+      .filter((r) => r.status !== "confirmed")
+      .filter(
+        (r) =>
+          !ENDED_STAGES.has(r.onrampStage ?? "") ||
+          now - (r.onrampCheckedAt ?? 0) >= ENDED_RECHECK_MS,
+      )
       .sort((a, b) => (a.onrampCheckedAt ?? 0) - (b.onrampCheckedAt ?? 0))
       .slice(0, limit)
       .map((r) => ({ depositId: r._id, orderId: r.onrampOrderId as string }));

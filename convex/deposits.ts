@@ -567,6 +567,10 @@ export const expireStale = internalMutation({
     let expired = 0;
     for (const row of stale) {
       if (row.expiresAt > now) continue;
+      // SGX has the player's money and is delivering (or waiting to refill its
+      // pool). The quote must stay open for that transfer, however long it
+      // takes — expiring it would start the late-match clock on money owed.
+      if (row.onrampStage === "sending" || row.onrampStage === "delayed") continue;
       await ctx.db.patch(row._id, { status: "expired", updatedAt: now });
       expired++;
     }
@@ -599,6 +603,13 @@ function ecocashOutcome(row: Doc<"cryptoDeposits">): {
   const raw = `${row.onrampTrace ?? ""} ${row.onrampReason ?? ""}`;
   const paid = PAID_MARKERS.test(raw) || /exceeds balance|sendTokens|Blockchain/i.test(raw);
   const stage = row.onrampStage;
+  if (stage === "delayed") {
+    return {
+      paid: true,
+      reason:
+        "Your EcoCash payment was received. Delivery is waiting for the liquidity pool to be refilled — your balance is credited automatically as soon as it is. There is nothing you need to do.",
+    };
+  }
   if (stage === "expired") {
     return {
       paid,

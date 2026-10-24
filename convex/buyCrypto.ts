@@ -210,6 +210,13 @@ export const topUpWithEcocash = action({
         depositId: quote.depositId,
         error: msg,
       });
+      // SGX refused before charging because its pool cannot deliver. Say so
+      // plainly — this is a wait, not a fault, and nothing left their phone.
+      if (msg.includes("LIQUIDITY_LOW")) {
+        throw new ConvexError(
+          "EcoCash top-ups are paused for a short while as the liquidity pool is refilled. Nothing was charged — please try again soon.",
+        );
+      }
       throw new ConvexError(`EcoCash top-up could not start: ${msg}`);
     }
   },
@@ -362,6 +369,8 @@ type SgxOnrampOrderStatus =
       provider: string | null;
       paymentMethod: string | null;
       txHash: string | null;
+      /** Paid, queued at SGX until its liquidity wallet is refilled. */
+      waitingOnLiquidity?: boolean;
       steps?: Array<{ at: number; level: string; step: string; message: string }>;
     };
 
@@ -427,8 +436,10 @@ async function checkOnrampOrder(
       ? {
           depositId,
           found: true,
-          stage: res.stage,
-          reason: onrampReason(res),
+          // Paid and queued, not broken: its own stage, so the player is told
+          // they will be credited rather than that something failed.
+          stage: res.waitingOnLiquidity ? "delayed" : res.stage,
+          reason: res.waitingOnLiquidity ? null : onrampReason(res),
           route:
             [res.provider, res.paymentMethod].filter(Boolean).join(" · ") ||
             null,
@@ -486,6 +497,34 @@ export const ecocashTopUpStatus = action({
       available: boolean;
       message: string | null;
     };
-    return { available: res.available, message: res.message };
+    if (!res.available) return { available: res.available, message: res.message };
+
+    /*
+     * Open at the provider, but can SGX's pool deliver? A player who cannot be
+     * paid out should not be asked to approve a charge. Unknown is treated as
+     * open — SGX re-checks each order before charging anyway.
+     */
+    try {
+      const client = new ConvexHttpClient(getChessaConvexUrl());
+      const cap = await client.action(onrampCapacityRef, {
+        internalSecret: getChessaV0InternalSecret(),
+      });
+      if (cap.known && (cap.usdt ?? 0) < MIN_DEPOSIT) {
+        return {
+          available: false,
+          message:
+            "EcoCash top-ups are paused for a short while as the liquidity pool is refilled. Please try again soon.",
+        };
+      }
+    } catch {
+      /* older SGX without the capacity call, or unreachable: stay open */
+    }
+    return { available: true, message: null };
   },
 });
+
+const onrampCapacityRef = makeFunctionReference<
+  "action",
+  { internalSecret: string },
+  { known: boolean; usdt: number | null; ok: boolean }
+>("v0public:onrampCapacity");
